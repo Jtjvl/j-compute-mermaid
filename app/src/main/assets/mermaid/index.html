@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=8, user-scalable=yes" />
+    <title>Mermaid renderer</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            background: transparent;
+            overflow: auto;
+        }
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        }
+        #stage {
+            min-height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 16px 32px;
+        }
+        #stage svg {
+            max-width: 100%;
+            height: auto;
+        }
+        #empty, #error {
+            display: none;
+            max-width: 28rem;
+            padding: 24px;
+            text-align: center;
+            line-height: 1.45;
+        }
+        #empty {
+            color: #6b7280;
+        }
+        #error {
+            color: #b42318;
+            white-space: pre-wrap;
+            text-align: left;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+        }
+        body.dark #empty { color: #9ca3af; }
+        body.dark #error { color: #fda29b; }
+    </style>
+</head>
+<body>
+    <div id="empty">Write a diagram in Edit, then switch to View.</div>
+    <div id="error"></div>
+    <div id="stage"></div>
+    <script src="mermaid.min.js"></script>
+    <script src="bridge.js"></script>
+</body>
+</html>
