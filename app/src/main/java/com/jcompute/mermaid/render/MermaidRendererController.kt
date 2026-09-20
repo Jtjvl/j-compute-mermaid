@@ -99,7 +99,7 @@ class MermaidRendererController {
     }
 
     private fun runWhenReady(block: () -> Unit) {
-        val action = { main.post(block) }
+        val action: () -> Unit = { main.post(block) }
         if (ready && webView != null) {
             action()
         } else {

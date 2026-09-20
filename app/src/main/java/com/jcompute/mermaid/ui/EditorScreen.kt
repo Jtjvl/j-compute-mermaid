@@ -36,7 +36,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.NoteAdd
+import androidx.compose.material.icons.automirrored.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -205,6 +205,8 @@ private fun EditorTopBar(
     onSamples: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    Surface(color = MaterialTheme.colorScheme.surface) {
+    Column(modifier = Modifier.fillMaxWidth()) {
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -215,17 +217,11 @@ private fun EditorTopBar(
             }
         },
         title = {
-            Column {
-                ModeToggle(mode = mode, onModeChange = onModeChange)
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         },
         actions = {
             if (exporting) {
@@ -247,7 +243,7 @@ private fun EditorTopBar(
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
                         text = { Text("New diagram") },
-                        leadingIcon = { Icon(Icons.Outlined.NoteAdd, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
                         onClick = {
                             menuOpen = false
                             onNew()
@@ -281,15 +277,26 @@ private fun EditorTopBar(
             }
         },
     )
+        ModeToggle(
+            mode = mode,
+            onModeChange = onModeChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        HorizontalDivider()
+    }
+    }
 }
 
 @Composable
 private fun ModeToggle(
     mode: EditorMode,
     onModeChange: (EditorMode) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val options = listOf(EditorMode.Edit to "Edit", EditorMode.View to "View")
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier) {
         options.forEachIndexed { index, (value, label) ->
             SegmentedButton(
                 selected = mode == value,
@@ -446,7 +453,7 @@ private fun RecentsSheet(
             onClick = onNew,
             modifier = Modifier.padding(horizontal = 12.dp),
         ) {
-            Icon(Icons.Outlined.NoteAdd, contentDescription = null)
+            Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("New diagram")
         }
