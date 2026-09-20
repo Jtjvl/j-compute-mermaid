@@ -33,6 +33,11 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/*" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/markdown" />
+            </intent-filter>
 
             <!-- Open / view text documents. -->
             <intent-filter>
@@ -79,6 +84,21 @@
                     android:mimeType="*/*"
                     android:pathPattern=".*\\..*\\.mmd"
                     android:scheme="content" />
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.mermaid"
+                    android:scheme="content" />
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.md"
+                    android:scheme="content" />
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.md"
+                    android:scheme="file" />
             </intent-filter>
         </activity>
 

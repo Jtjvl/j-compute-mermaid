@@ -4,7 +4,7 @@ object TitleParser {
     fun fromSource(
         source: String,
         fileName: String? = null,
-        fallback: String = "Untitled diagram",
+        fallback: String = "Untitled",
     ): String {
         val namedFile = fileName
             ?.substringAfterLast('/')

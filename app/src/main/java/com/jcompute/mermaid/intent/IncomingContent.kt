@@ -3,6 +3,7 @@ package com.jcompute.mermaid.intent
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.jcompute.mermaid.data.MermaidIngest
 
 data class IncomingDocument(
     val text: String,
@@ -29,11 +30,12 @@ object IncomingContent {
     }
 
     fun read(intent: Intent, resolver: android.content.ContentResolver): IncomingDocument? {
-        return when (intent.action) {
+        val document = when (intent.action) {
             Intent.ACTION_SEND -> readSend(intent, resolver)
             Intent.ACTION_VIEW, Intent.ACTION_EDIT -> readView(intent, resolver)
             else -> null
-        }
+        } ?: return null
+        return document.copy(text = MermaidIngest.extractSource(document.text))
     }
 
     private fun readSend(intent: Intent, resolver: android.content.ContentResolver): IncomingDocument? {

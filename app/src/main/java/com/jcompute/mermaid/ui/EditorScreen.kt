@@ -1,43 +1,38 @@
 package com.jcompute.mermaid.ui
 
-import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.automirrored.outlined.NoteAdd
-import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,7 +42,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -55,11 +51,13 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,21 +68,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.jcompute.mermaid.data.Diagram
-import com.jcompute.mermaid.data.Samples
-import com.jcompute.mermaid.export.ExportFormat
+import com.jcompute.mermaid.data.Appearance
+import com.jcompute.mermaid.data.StoredDiagram
 import com.jcompute.mermaid.intent.IncomingContent
+import com.jcompute.mermaid.ui.theme.PaperDark
+import com.jcompute.mermaid.ui.theme.PaperLight
 import java.text.DateFormat
 import java.util.Date
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,6 +93,10 @@ fun MermaidAppRoot(
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
 
+    LaunchedEffect(darkTheme) {
+        viewModel.setDarkCanvas(darkTheme)
+    }
+
     val openDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
@@ -103,138 +104,149 @@ fun MermaidAppRoot(
         runCatching {
             val text = IncomingContent.readUri(context.contentResolver, uri)
             val name = IncomingContent.displayName(context.contentResolver, uri)
-            viewModel.importText(text, name, preferEdit = true)
+            viewModel.openImported(text, name)
         }.onFailure { error ->
             viewModel.notify(error.message ?: "Could not open that file.")
         }
+    }
+
+    val saveAs = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri: Uri? ->
+        if (uri != null) viewModel.saveToUri(uri)
     }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is UiEvent.Message -> snackbar.showSnackbar(event.text)
-                is UiEvent.ShareFile -> shareFile(context, event.uri, event.mimeType, event.title)
-                is UiEvent.ShareText -> shareText(context, event.text, event.title)
             }
         }
     }
 
+    fun paste() {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        val text = clipboard.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+        viewModel.pasteFromClipboard(text)
+    }
+
     Scaffold(
         topBar = {
-            EditorTopBar(
-                title = state.title,
-                mode = state.mode,
-                exporting = state.isExporting,
-                onModeChange = viewModel::setMode,
-                onRecents = { viewModel.setRecentsOpen(true) },
-                onExport = { viewModel.setExportOpen(true) },
-                onNew = { viewModel.newDiagram() },
+            DocumentTopBar(
+                state = state,
+                onPaste = ::paste,
+                onCopyImage = viewModel::copyImage,
+                onSave = viewModel::save,
+                onSaveAs = { saveAs.launch(state.fileName) },
                 onOpen = {
                     openDocument.launch(
                         arrayOf(
                             "text/plain",
+                            "text/markdown",
                             "text/*",
-                            "text/x-mermaid",
-                            "application/octet-stream",
                             "*/*",
                         ),
                     )
                 },
-                onPaste = {
-                    val clipboard = context.getSystemService(ClipboardManager::class.java)
-                    val text = clipboard.primaryClip
-                        ?.takeIf { it.itemCount > 0 }
-                        ?.getItemAt(0)
-                        ?.coerceToText(context)
-                        ?.toString()
-                    viewModel.pasteFromClipboard(text)
-                },
-                onSamples = { viewModel.setSamplesOpen(true) },
+                onAppearance = viewModel::setAppearance,
+            )
+        },
+        bottomBar = {
+            DocumentBottomBar(
+                screen = state.screen,
+                mode = state.mode,
+                onFiles = viewModel::showFiles,
+                onMode = viewModel::setMode,
+                onNew = viewModel::newDiagram,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.surface,
     ) { padding ->
-        EditorCanvas(
-            state = state,
-            darkTheme = darkTheme,
-            viewModel = viewModel,
-            modifier = Modifier
+        Box(
+            Modifier
                 .padding(padding)
                 .imePadding()
                 .fillMaxSize(),
-        )
-    }
-
-    if (state.recentsOpen) {
-        RecentsSheet(
-            recents = state.recents,
-            currentId = state.currentId,
-            onDismiss = { viewModel.setRecentsOpen(false) },
-            onOpen = viewModel::openRecent,
-            onDelete = viewModel::deleteRecent,
-            onNew = { viewModel.newDiagram() },
-        )
-    }
-    if (state.exportOpen) {
-        ExportSheet(
-            onDismiss = { viewModel.setExportOpen(false) },
-            onExport = { format -> viewModel.export(format, darkTheme) },
-        )
-    }
-    if (state.samplesOpen) {
-        SamplesSheet(
-            onDismiss = { viewModel.setSamplesOpen(false) },
-            onPick = { viewModel.applySample(it) },
-        )
+        ) {
+            MermaidEngine(
+                source = state.source,
+                darkTheme = darkTheme,
+                controller = viewModel.renderer,
+                onRendered = viewModel::onRenderResult,
+                modifier = Modifier
+                    .size(360.dp)
+                    .offset(x = (-2400).dp),
+            )
+            if (state.screen == Screen.Files) {
+                FilesPane(
+                    files = state.files,
+                    currentPath = state.currentFile?.canonicalPath,
+                    onOpen = viewModel::openStored,
+                    onDelete = viewModel::deleteStored,
+                    onPaste = ::paste,
+                    onOpenExternal = {
+                        openDocument.launch(arrayOf("text/plain", "text/markdown", "text/*", "*/*"))
+                    },
+                    onNew = viewModel::newDiagram,
+                )
+            } else {
+                DocumentPane(
+                    state = state,
+                    darkTheme = darkTheme,
+                    onSourceChange = viewModel::onSourceChange,
+                    onPaste = ::paste,
+                    onCopyImage = viewModel::copyImage,
+                )
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditorTopBar(
-    title: String,
-    mode: EditorMode,
-    exporting: Boolean,
-    onModeChange: (EditorMode) -> Unit,
-    onRecents: () -> Unit,
-    onExport: () -> Unit,
-    onNew: () -> Unit,
-    onOpen: () -> Unit,
+private fun DocumentTopBar(
+    state: EditorUiState,
     onPaste: () -> Unit,
-    onSamples: () -> Unit,
+    onCopyImage: () -> Unit,
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
+    onOpen: () -> Unit,
+    onAppearance: (Appearance) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Surface(color = MaterialTheme.colorScheme.surface) {
-    Column(modifier = Modifier.fillMaxWidth()) {
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
-        navigationIcon = {
-            IconButton(onClick = onRecents) {
-                Icon(Icons.Outlined.History, contentDescription = "Recents")
-            }
-        },
         title = {
             Text(
-                text = title,
+                text = if (state.isDirty) "${state.fileName} ·" else state.fileName,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
         actions = {
-            if (exporting) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .padding(end = 8.dp)
-                        .width(18.dp)
-                        .height(18.dp),
-                    strokeWidth = 2.dp,
-                )
+            IconButton(onClick = onPaste) {
+                Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste")
             }
-            IconButton(onClick = onExport) {
-                Icon(Icons.Outlined.IosShare, contentDescription = "Export")
+            if (state.mode == EditorMode.View && state.screen == Screen.Document) {
+                if (state.isExporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    IconButton(onClick = onCopyImage) {
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy image")
+                    }
+                }
             }
             Box {
                 IconButton(onClick = { menuOpen = true }) {
@@ -242,116 +254,108 @@ private fun EditorTopBar(
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("New diagram") },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
+                        text = { Text("Save .mmd") },
+                        leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null) },
                         onClick = {
                             menuOpen = false
-                            onNew()
+                            onSave()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Open file") },
+                        text = { Text("Save as…") },
+                        onClick = {
+                            menuOpen = false
+                            onSaveAs()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Open…") },
                         leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
                         onClick = {
                             menuOpen = false
                             onOpen()
                         },
                     )
+                    HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Paste from clipboard") },
-                        leadingIcon = { Icon(Icons.Outlined.ContentPaste, contentDescription = null) },
+                        text = { Text("Appearance: ${state.appearance.name}") },
+                        leadingIcon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
                         onClick = {
-                            menuOpen = false
-                            onPaste()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Samples") },
-                        leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onSamples()
+                            val next = when (state.appearance) {
+                                Appearance.System -> Appearance.Light
+                                Appearance.Light -> Appearance.Dark
+                                Appearance.Dark -> Appearance.System
+                            }
+                            onAppearance(next)
                         },
                     )
                 }
             }
         },
     )
-        ModeToggle(
-            mode = mode,
-            onModeChange = onModeChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        HorizontalDivider()
-    }
-    }
 }
 
 @Composable
-private fun ModeToggle(
+private fun DocumentBottomBar(
+    screen: Screen,
     mode: EditorMode,
-    onModeChange: (EditorMode) -> Unit,
-    modifier: Modifier = Modifier,
+    onFiles: () -> Unit,
+    onMode: (EditorMode) -> Unit,
+    onNew: () -> Unit,
 ) {
-    val options = listOf(EditorMode.Edit to "Edit", EditorMode.View to "View")
-    SingleChoiceSegmentedButtonRow(modifier = modifier) {
-        options.forEachIndexed { index, (value, label) ->
-            SegmentedButton(
-                selected = mode == value,
-                onClick = { onModeChange(value) },
-                shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                icon = {
-                    Icon(
-                        imageVector = if (value == EditorMode.Edit) Icons.Outlined.Code else Icons.Outlined.Visibility,
-                        contentDescription = null,
-                    )
-                },
-            ) {
-                Text(label)
+    NavigationBar {
+        NavigationBarItem(
+            selected = screen == Screen.Files,
+            onClick = onFiles,
+            icon = { Icon(Icons.Outlined.FolderOpen, contentDescription = "Files") },
+            label = { Text("Files") },
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.padding(horizontal = 4.dp)) {
+            listOf(EditorMode.Edit to "Edit", EditorMode.View to "View").forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = screen == Screen.Document && mode == value,
+                    onClick = { onMode(value) },
+                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                ) {
+                    Text(label)
+                }
             }
         }
+        NavigationBarItem(
+            selected = false,
+            onClick = onNew,
+            icon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = "New") },
+            label = { Text("New") },
+        )
     }
 }
 
 @Composable
-private fun EditorCanvas(
+private fun DocumentPane(
     state: EditorUiState,
     darkTheme: Boolean,
-    viewModel: EditorViewModel,
-    modifier: Modifier = Modifier,
+    onSourceChange: (String) -> Unit,
+    onPaste: () -> Unit,
+    onCopyImage: () -> Unit,
 ) {
-    BoxWithConstraints(modifier = modifier) {
-        val widthPx = constraints.maxWidth.toFloat()
-        val widthDp = with(LocalDensity.current) { constraints.maxWidth.toDp() }
-        val offsetFraction by animateFloatAsState(
-            targetValue = if (state.mode == EditorMode.View) -1f else 0f,
-            animationSpec = tween(durationMillis = 280),
-            label = "edit-view-slide",
-        )
-
-        Row(
-            modifier = Modifier
-                .width(widthDp * 2)
-                .fillMaxHeight()
-                .offset { IntOffset(x = (offsetFraction * widthPx).roundToInt(), y = 0) },
-        ) {
+    AnimatedContent(
+        targetState = state.mode,
+        label = "edit-view",
+        modifier = Modifier.fillMaxSize(),
+    ) { mode ->
+        if (mode == EditorMode.Edit) {
             SourceEditor(
                 source = state.source,
-                onSourceChange = viewModel::onSourceChange,
-                modifier = Modifier
-                    .width(widthDp)
-                    .fillMaxHeight(),
+                onSourceChange = onSourceChange,
+                modifier = Modifier.fillMaxSize(),
             )
-            DiagramPane(
-                source = state.source,
+        } else {
+            ViewPane(
+                state = state,
                 darkTheme = darkTheme,
-                isLoading = state.isLoading,
-                viewModel = viewModel,
-                modifier = Modifier
-                    .width(widthDp)
-                    .fillMaxHeight(),
+                onPaste = onPaste,
+                onCopyImage = onCopyImage,
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
@@ -374,11 +378,11 @@ private fun SourceEditor(
             modifier = Modifier
                 .fillMaxSize()
                 .horizontalScroll(scroll)
-                .padding(16.dp),
+                .padding(20.dp),
             textStyle = TextStyle(
                 fontFamily = FontFamily.Monospace,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+                fontSize = 15.sp,
+                lineHeight = 26.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -386,10 +390,11 @@ private fun SourceEditor(
                 Box(Modifier.fillMaxSize()) {
                     if (source.isEmpty()) {
                         Text(
-                            text = "flowchart TD\n    Start --> End",
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            text = "flowchart TB\n    Start --> Stop",
+                            style = MaterialTheme.typography.bodyLarge.copy(
                                 fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                lineHeight = 26.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                             ),
                         )
                     }
@@ -401,200 +406,168 @@ private fun SourceEditor(
 }
 
 @Composable
-private fun DiagramPane(
-    source: String,
+private fun ViewPane(
+    state: EditorUiState,
     darkTheme: Boolean,
-    isLoading: Boolean,
-    viewModel: EditorViewModel,
+    onPaste: () -> Unit,
+    onCopyImage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surface,
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            if (!isLoading) {
-                MermaidWebView(
-                    source = source,
-                    darkTheme = darkTheme,
-                    controller = viewModel.renderer,
-                    onReady = {},
-                    onRendered = viewModel::onRenderResult,
-                    modifier = Modifier.fillMaxSize(),
+    val paper = if (darkTheme) PaperDark else PaperLight
+    Box(modifier) {
+        when {
+            state.source.isBlank() -> {
+                EmptyView(onPaste = onPaste, modifier = Modifier.fillMaxSize())
+            }
+            state.renderError != null -> {
+                Text(
+                    text = state.renderError,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(20.dp),
                 )
             }
-            if (isLoading) {
-                CircularProgressIndicator(Modifier.align(Alignment.Center))
+            else -> {
+                ZoomableDiagram(
+                    png = state.previewPng,
+                    paper = paper,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                if (state.isRendering || (state.previewPng == null && state.renderError == null)) {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                }
             }
+        }
+        if (state.previewPng != null && state.renderError == null && state.source.isNotBlank()) {
+            Button(
+                onClick = onCopyImage,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(20.dp)
+                    .height(48.dp),
+            ) {
+                Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text("Copy image")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyView(
+    onPaste: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Paste or share a Mermaid diagram.",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Fenced markdown from chat is stripped automatically. You land in View.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
+        )
+        Button(onClick = onPaste, modifier = Modifier.height(48.dp)) {
+            Icon(Icons.Outlined.ContentPaste, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text("Paste")
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RecentsSheet(
-    recents: List<Diagram>,
-    currentId: String,
-    onDismiss: () -> Unit,
-    onOpen: (String) -> Unit,
-    onDelete: (String) -> Unit,
+private fun FilesPane(
+    files: List<StoredDiagram>,
+    currentPath: String?,
+    onOpen: (java.io.File) -> Unit,
+    onDelete: (java.io.File) -> Unit,
+    onPaste: () -> Unit,
+    onOpenExternal: () -> Unit,
     onNew: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    Column(Modifier.fillMaxSize()) {
         Text(
-            text = "Recents",
+            text = "Saved .mmd",
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
         )
-        TextButton(
-            onClick = onNew,
-            modifier = Modifier.padding(horizontal = 12.dp),
-        ) {
-            Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("New diagram")
-        }
-        if (recents.isEmpty()) {
-            Text(
-                text = "No saved diagrams yet. New work is stored on this device.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(24.dp),
-            )
+        if (files.isEmpty()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(28.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Nothing saved yet. Paste from chat, then Save .mmd.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = onPaste) { Text("Paste") }
+                TextButton(onClick = onOpenExternal) { Text("Open…") }
+                TextButton(onClick = onNew) { Text("New") }
+            }
         } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-                items(recents, key = { it.id }) { diagram ->
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                text = diagram.title,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                text = relativeTime(diagram.updatedAtMillis),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        },
-                        trailingContent = {
-                            Row {
-                                if (diagram.id == currentId) {
-                                    Text(
-                                        text = "Open",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.align(Alignment.CenterVertically),
-                                    )
-                                }
-                                IconButton(onClick = { onDelete(diagram.id) }) {
-                                    Icon(Icons.Outlined.Delete, contentDescription = "Delete")
-                                }
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(files, key = { it.file.absolutePath }) { diagram ->
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart ||
+                                value == SwipeToDismissBoxValue.StartToEnd
+                            ) {
+                                onDelete(diagram.file)
+                                true
+                            } else {
+                                false
                             }
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpen(diagram.id) }
-                            .padding(horizontal = 4.dp),
                     )
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {},
+                    ) {
+                        ListItem(
+                            headlineContent = {
+                                Text(diagram.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            },
+                            supportingContent = {
+                                Text(
+                                    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                                        .format(Date(diagram.updatedAtMillis)),
+                                )
+                            },
+                            trailingContent = {
+                                if (diagram.file.canonicalPath == currentPath) {
+                                    Text(
+                                        "Open",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpen(diagram.file) },
+                        )
+                    }
                     HorizontalDivider()
                 }
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExportSheet(
-    onDismiss: () -> Unit,
-    onExport: (ExportFormat) -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            text = "Export",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-        )
-        Text(
-            text = "Share through the Android sharesheet as PNG, SVG, or Mermaid source.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-        )
-        ExportFormat.entries.forEach { format ->
-            ListItem(
-                headlineContent = { Text(format.label) },
-                supportingContent = { Text(".${format.extension}  ·  ${format.mimeType}") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onExport(format) },
-            )
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SamplesSheet(
-    onDismiss: () -> Unit,
-    onPick: (String) -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            text = "Samples",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-        )
-        Samples.all.forEach { sample ->
-            ListItem(
-                headlineContent = { Text(sample.name) },
-                supportingContent = {
-                    Text(
-                        text = sample.source.lineSequence().first { it.isNotBlank() },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                trailingContent = {
-                    TextButton(onClick = { onPick(sample.source) }) { Text("Use") }
-                },
-            )
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-}
-
-private fun relativeTime(millis: Long): String {
-    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(millis))
-}
-
-private fun shareFile(
-    context: android.content.Context,
-    uri: Uri,
-    mimeType: String,
-    title: String,
-) {
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = mimeType
-        putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_SUBJECT, title)
-        clipData = ClipData.newUri(context.contentResolver, title, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "Export diagram"))
-}
-
-private fun shareText(context: android.content.Context, text: String, title: String) {
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
-        putExtra(Intent.EXTRA_SUBJECT, title)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share diagram"))
 }

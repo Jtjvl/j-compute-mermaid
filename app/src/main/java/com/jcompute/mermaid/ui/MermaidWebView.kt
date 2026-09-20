@@ -8,7 +8,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -18,26 +17,18 @@ import com.jcompute.mermaid.render.MermaidRendererController
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun MermaidWebView(
+fun MermaidEngine(
     source: String,
     darkTheme: Boolean,
     controller: MermaidRendererController,
-    onReady: () -> Unit,
     onRendered: (ok: Boolean, error: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val bridge = remember(controller) {
         MermaidJsBridge(
-            onReady = {
-                controller.markReady()
-                onReady()
-            },
-            onRendered = { ok, error, _, _ ->
-                onRendered(ok, error)
-            },
-            onExport = { kind, payload ->
-                controller.deliverExport(kind, payload)
-            },
+            onReady = { controller.markReady() },
+            onRendered = { ok, error, _, _ -> onRendered(ok, error) },
+            onExport = { kind, payload -> controller.deliverExport(kind, payload) },
         )
     }
 
@@ -45,24 +36,17 @@ fun MermaidWebView(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                )
+                layoutParams = ViewGroup.LayoutParams(400, 400)
                 setBackgroundColor(Color.TRANSPARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
-                // Bundled mermaid.min.js is a sibling under android_asset/.
                 settings.allowFileAccess = true
                 settings.allowContentAccess = false
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                settings.builtInZoomControls = true
-                settings.displayZoomControls = false
                 settings.cacheMode = WebSettings.LOAD_NO_CACHE
                 settings.blockNetworkLoads = true
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                isNestedScrollingEnabled = true
+                isFocusable = false
+                isFocusableInTouchMode = false
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(
@@ -75,18 +59,10 @@ fun MermaidWebView(
                 loadUrl("file:///android_asset/mermaid/index.html")
             }
         },
-        update = { view ->
-            controller.attach(view)
-        },
+        update = { view -> controller.attach(view) },
     )
 
     LaunchedEffect(source, darkTheme) {
         controller.render(source, darkTheme)
-    }
-
-    DisposableEffect(controller) {
-        onDispose {
-            // The AndroidView owns the WebView lifecycle; only drop the controller hook.
-        }
     }
 }

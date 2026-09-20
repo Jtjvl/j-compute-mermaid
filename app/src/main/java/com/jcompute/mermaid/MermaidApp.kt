@@ -1,14 +1,18 @@
 package com.jcompute.mermaid
 
 import android.app.Application
-import com.jcompute.mermaid.data.DiagramRepository
+import com.jcompute.mermaid.data.AppSettings
+import com.jcompute.mermaid.data.DiagramStore
 
 class MermaidApp : Application() {
-    lateinit var repository: DiagramRepository
+    lateinit var store: DiagramStore
+        private set
+    lateinit var settings: AppSettings
         private set
 
     override fun onCreate() {
         super.onCreate()
-        repository = DiagramRepository(this)
+        store = DiagramStore(filesDir)
+        settings = AppSettings(this)
     }
 }
