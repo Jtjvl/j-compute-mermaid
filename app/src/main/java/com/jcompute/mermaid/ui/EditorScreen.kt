@@ -6,22 +6,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -43,7 +38,6 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -54,13 +48,9 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,10 +72,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jcompute.mermaid.data.Appearance
 import com.jcompute.mermaid.data.DiagramTheme
-import com.jcompute.mermaid.data.StoredDiagram
 import com.jcompute.mermaid.intent.IncomingContent
-import java.text.DateFormat
-import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,6 +83,11 @@ fun MermaidAppRoot(
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     val paper = Color(state.diagramTheme.canvasArgb)
+    var confirmBulkDelete by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.selection.active) {
+        if (!state.selection.active) confirmBulkDelete = false
+    }
 
     val openDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -142,26 +134,34 @@ fun MermaidAppRoot(
 
     Scaffold(
         topBar = {
-            DocumentTopBar(
-                state = state,
-                onPaste = ::paste,
-                onCopyImage = viewModel::copyImage,
-                onFit = viewModel.renderer::resetViewTransform,
-                onSave = viewModel::save,
-                onSaveAs = { saveAs.launch(state.fileName) },
-                onOpen = {
-                    openDocument.launch(
-                        arrayOf(
-                            "text/plain",
-                            "text/markdown",
-                            "text/*",
-                            "*/*",
-                        ),
-                    )
-                },
-                onAppearance = viewModel::setAppearance,
-                onDiagramTheme = viewModel::setDiagramTheme,
-            )
+            if (state.screen == Screen.Files) {
+                FilesTopBar(
+                    selection = state.selection,
+                    onCancelSelection = viewModel::cancelSelection,
+                    onDeleteSelected = { confirmBulkDelete = true },
+                )
+            } else {
+                DocumentTopBar(
+                    state = state,
+                    onPaste = ::paste,
+                    onCopyImage = viewModel::copyImage,
+                    onFit = viewModel.renderer::resetViewTransform,
+                    onSave = viewModel::save,
+                    onSaveAs = { saveAs.launch(state.fileName) },
+                    onOpen = {
+                        openDocument.launch(
+                            arrayOf(
+                                "text/plain",
+                                "text/markdown",
+                                "text/*",
+                                "*/*",
+                            ),
+                        )
+                    },
+                    onAppearance = viewModel::setAppearance,
+                    onDiagramTheme = viewModel::setDiagramTheme,
+                )
+            }
         },
         bottomBar = {
             DocumentBottomBar(
@@ -193,6 +193,7 @@ fun MermaidAppRoot(
             MermaidEngine(
                 source = state.source,
                 diagramTheme = state.diagramTheme,
+                renderEpoch = state.renderEpoch,
                 controller = viewModel.renderer,
                 onRendered = viewModel::onRenderResult,
                 modifier = Modifier
@@ -217,8 +218,12 @@ fun MermaidAppRoot(
                     FilesPane(
                         files = state.files,
                         currentPath = state.currentFile?.canonicalPath,
+                        selection = state.selection,
                         onOpen = viewModel::openStored,
                         onDelete = viewModel::deleteStored,
+                        onEnterSelection = viewModel::enterSelection,
+                        onToggleSelected = viewModel::toggleSelected,
+                        onCancelSelection = viewModel::cancelSelection,
                         onPaste = ::paste,
                         onOpenExternal = {
                             openDocument.launch(arrayOf("text/plain", "text/markdown", "text/*", "*/*"))
@@ -244,6 +249,17 @@ fun MermaidAppRoot(
                 )
             }
         }
+    }
+
+    if (confirmBulkDelete && state.selection.active) {
+        BulkDeleteDialog(
+            count = state.selection.count,
+            onConfirm = {
+                confirmBulkDelete = false
+                viewModel.deleteSelected()
+            },
+            onDismiss = { confirmBulkDelete = false },
+        )
     }
 }
 
@@ -513,92 +529,6 @@ private fun EmptyView(
             Icon(Icons.Outlined.ContentPaste, contentDescription = null)
             Spacer(Modifier.size(8.dp))
             Text("Paste")
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FilesPane(
-    files: List<StoredDiagram>,
-    currentPath: String?,
-    onOpen: (java.io.File) -> Unit,
-    onDelete: (java.io.File) -> Unit,
-    onPaste: () -> Unit,
-    onOpenExternal: () -> Unit,
-    onNew: () -> Unit,
-) {
-    Column(Modifier.fillMaxSize()) {
-        Text(
-            text = "Saved .mmd",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-        )
-        if (files.isEmpty()) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(28.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "Nothing saved yet. Paste from chat, then Save .mmd.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(16.dp))
-                TextButton(onClick = onPaste) { Text("Paste") }
-                TextButton(onClick = onOpenExternal) { Text("Open…") }
-                TextButton(onClick = onNew) { Text("New") }
-            }
-        } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(files, key = { it.file.absolutePath }) { diagram ->
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart ||
-                                value == SwipeToDismissBoxValue.StartToEnd
-                            ) {
-                                onDelete(diagram.file)
-                                true
-                            } else {
-                                false
-                            }
-                        },
-                    )
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {},
-                    ) {
-                        ListItem(
-                            headlineContent = {
-                                Text(diagram.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            supportingContent = {
-                                Text(
-                                    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-                                        .format(Date(diagram.updatedAtMillis)),
-                                )
-                            },
-                            trailingContent = {
-                                if (diagram.file.canonicalPath == currentPath) {
-                                    Text(
-                                        "Open",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpen(diagram.file) },
-                        )
-                    }
-                    HorizontalDivider()
-                }
-            }
         }
     }
 }

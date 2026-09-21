@@ -30,4 +30,13 @@ class MermaidBridgeConfigTest {
         assertFalse(js.contains("entityPadding:"))
         assertFalse(js.contains("theme: \"dark\""))
     }
+
+    @Test
+    fun identicalSourceReplaysLastSvgAndNotifies() {
+        val js = bridge()
+        assertTrue(js.contains("lastOkSource"))
+        assertTrue(js.contains("lastOkSvg"))
+        assertTrue(js.contains("function presentSuccess"))
+        assertTrue(js.contains("text === lastOkSource && resolved === lastOkTheme && lastOkSvg"))
+    }
 }

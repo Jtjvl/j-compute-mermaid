@@ -74,8 +74,9 @@ minSdk 26. JDK 17+.
 
 ## Files
 
-- **Save .mmd** writes `filesDir/diagrams/<name>.mmd`
-- **Files** lists those files (swipe to delete)
+- **Save .mmd** writes `filesDir/diagrams/<name>.mmd` and a preview PNG under `diagrams/.thumbs/`
+- **Files** lists those files with diagram thumbnails (placeholder until a diagram has been viewed or saved)
+- Long-press a row to multi-select (checkboxes) and bulk-delete; swipe still deletes one file
 - **Save as…** exports through SAF to shared storage
 - Unsaved paste/share stays in memory until you save
 

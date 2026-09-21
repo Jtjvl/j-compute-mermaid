@@ -50,6 +50,8 @@ data class EditorUiState(
     val isExporting: Boolean = false,
     val appearance: Appearance = Appearance.System,
     val diagramTheme: DiagramTheme = DiagramTheme.Default,
+    val renderEpoch: Long = 0,
+    val selection: FileSelection = FileSelection(),
 ) {
     val isDirty: Boolean get() = source != savedSource
     val fileName: String get() = currentFile?.name ?: "Untitled.mmd"
@@ -93,16 +95,23 @@ class EditorViewModel(
     }
 
     fun setMode(mode: EditorMode) {
-        _state.update { it.copy(mode = mode, screen = Screen.Document) }
+        _state.update { it.copy(mode = mode, screen = Screen.Document, selection = FileSelection()) }
     }
 
     fun showFiles() {
-        refreshFiles()
-        _state.update { it.copy(screen = Screen.Files) }
+        _state.update { state ->
+            val files = store.list()
+            val existing = files.map { it.file.canonicalPath }.toSet()
+            state.copy(
+                screen = Screen.Files,
+                files = files,
+                selection = state.selection.prune(existing),
+            )
+        }
     }
 
     fun showDocument() {
-        _state.update { it.copy(screen = Screen.Document) }
+        _state.update { it.copy(screen = Screen.Document, selection = FileSelection()) }
     }
 
     fun setAppearance(value: Appearance) {
@@ -114,10 +123,12 @@ class EditorViewModel(
         if (_state.value.diagramTheme == value) return
         settings.setDiagramTheme(value)
         _state.update {
+            val pass = RenderPass.next(it.renderEpoch, it.source)
             it.copy(
                 diagramTheme = value,
                 previewPng = null,
-                isRendering = it.source.isNotBlank() && it.mode == EditorMode.View,
+                renderEpoch = pass.epoch,
+                isRendering = pass.showSpinner && it.mode == EditorMode.View,
             )
         }
     }
@@ -146,11 +157,17 @@ class EditorViewModel(
             val scale = DiagramDisplay.pngScale(density).toDouble()
             val bytes = runCatching { renderer.exportPng(scale = scale, background = background) }.getOrNull()
             _state.update { it.copy(previewPng = bytes) }
+            val file = _state.value.currentFile
+            if (file != null && bytes != null) {
+                withContext(Dispatchers.IO) { store.writeThumbnail(file, bytes) }
+                refreshFiles()
+            }
         }
     }
 
     fun newDiagram() {
         _state.update {
+            val pass = RenderPass.next(it.renderEpoch, "")
             it.copy(
                 screen = Screen.Document,
                 currentFile = null,
@@ -160,7 +177,9 @@ class EditorViewModel(
                 mode = EditorMode.Edit,
                 renderError = null,
                 previewPng = null,
+                renderEpoch = pass.epoch,
                 isRendering = false,
+                selection = FileSelection(),
             )
         }
     }
@@ -168,14 +187,17 @@ class EditorViewModel(
     fun ingest(text: String, fileName: String? = null) {
         val source = MermaidIngest.extractSource(text)
         _state.update {
+            val pass = RenderPass.next(it.renderEpoch, source)
             it.copy(
                 screen = Screen.Document,
                 source = source,
                 title = displayTitle(source, fileName),
                 mode = EditorMode.View,
-                isRendering = source.isNotBlank(),
+                renderEpoch = pass.epoch,
+                isRendering = pass.showSpinner,
                 renderError = null,
                 previewPng = null,
+                selection = FileSelection(),
             )
         }
         if (source.isBlank()) {
@@ -210,6 +232,7 @@ class EditorViewModel(
         viewModelScope.launch {
             val source = withContext(Dispatchers.IO) { store.read(file) }
             _state.update {
+                val pass = RenderPass.next(it.renderEpoch, source)
                 it.copy(
                     screen = Screen.Document,
                     currentFile = file,
@@ -217,9 +240,11 @@ class EditorViewModel(
                     savedSource = source,
                     title = displayTitle(source, file.name),
                     mode = EditorMode.View,
-                    isRendering = source.isNotBlank(),
+                    renderEpoch = pass.epoch,
+                    isRendering = pass.showSpinner,
                     previewPng = null,
                     renderError = null,
+                    selection = FileSelection(),
                 )
             }
         }
@@ -229,12 +254,36 @@ class EditorViewModel(
         ingest(text, fileName)
     }
 
+    fun enterSelection(file: File) {
+        _state.update { it.copy(selection = it.selection.enter(file.canonicalPath)) }
+    }
+
+    fun toggleSelected(file: File) {
+        _state.update { it.copy(selection = it.selection.toggle(file.canonicalPath)) }
+    }
+
+    fun cancelSelection() {
+        _state.update { it.copy(selection = FileSelection()) }
+    }
+
     fun deleteStored(file: File) {
+        val removedCurrent = _state.value.currentFile?.canonicalPath == file.canonicalPath
         store.delete(file)
-        if (_state.value.currentFile?.canonicalPath == file.canonicalPath) {
-            newDiagram()
+        afterDeletes(removedCurrent, deletedCount = 1)
+    }
+
+    fun deleteSelected() {
+        val snapshot = _state.value
+        val toDelete = snapshot.files
+            .filter { snapshot.selection.contains(it.file.canonicalPath) }
+            .map { it.file }
+        if (toDelete.isEmpty()) {
+            cancelSelection()
+            return
         }
-        refreshFiles()
+        val removedCurrent = toDelete.any { it.canonicalPath == snapshot.currentFile?.canonicalPath }
+        val count = store.deleteAll(toDelete)
+        afterDeletes(removedCurrent, deletedCount = count)
     }
 
     fun save() {
@@ -243,6 +292,8 @@ class EditorViewModel(
             val file = withContext(Dispatchers.IO) {
                 val target = snapshot.currentFile ?: store.uniqueFile(TitleParser.fileSlug(snapshot.title))
                 store.write(target, snapshot.source)
+                snapshot.previewPng?.let { store.writeThumbnail(target, it) }
+                target
             }
             _state.update {
                 it.copy(
@@ -299,8 +350,40 @@ class EditorViewModel(
         _events.tryEmit(UiEvent.Message(message))
     }
 
+    private fun afterDeletes(removedCurrent: Boolean, deletedCount: Int) {
+        _state.update { state ->
+            val cleared = if (removedCurrent) {
+                val pass = RenderPass.next(state.renderEpoch, "")
+                state.copy(
+                    currentFile = null,
+                    source = "",
+                    savedSource = "",
+                    title = "Untitled",
+                    mode = EditorMode.Edit,
+                    renderError = null,
+                    previewPng = null,
+                    renderEpoch = pass.epoch,
+                    isRendering = false,
+                )
+            } else {
+                state
+            }
+            cleared.copy(
+                screen = Screen.Files,
+                files = store.list(),
+                selection = FileSelection(),
+            )
+        }
+        if (deletedCount <= 0) return
+        notify(if (deletedCount == 1) "Deleted 1 diagram" else "Deleted $deletedCount diagrams")
+    }
+
     private fun refreshFiles() {
-        _state.update { it.copy(files = store.list()) }
+        _state.update { state ->
+            val files = store.list()
+            val existing = files.map { it.file.canonicalPath }.toSet()
+            state.copy(files = files, selection = state.selection.prune(existing))
+        }
     }
 
     private fun displayTitle(source: String, fileName: String?): String {

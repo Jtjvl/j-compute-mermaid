@@ -20,6 +20,7 @@ import com.jcompute.mermaid.render.MermaidRendererController
 fun MermaidEngine(
     source: String,
     diagramTheme: DiagramTheme,
+    renderEpoch: Long,
     controller: MermaidRendererController,
     onRendered: (ok: Boolean, error: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -84,7 +85,7 @@ fun MermaidEngine(
         },
     )
 
-    LaunchedEffect(source, diagramTheme) {
+    LaunchedEffect(source, diagramTheme, renderEpoch) {
         controller.render(source, diagramTheme.mermaidId)
     }
 }

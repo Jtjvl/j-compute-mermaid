@@ -16,6 +16,9 @@
 
   let lastTheme = null;
   let renderSeq = 0;
+  let lastOkSource = null;
+  let lastOkTheme = null;
+  let lastOkSvg = null;
   let viewScale = 1;
   let viewX = 0;
   let viewY = 0;
@@ -221,6 +224,26 @@
     });
   }
 
+  function presentSuccess(svgMarkup, seq) {
+    if (seq !== renderSeq) return;
+    viewportEl.innerHTML = svgMarkup || "";
+    const svg = currentSvg();
+    if (!svg) {
+      show("error");
+      errorEl.textContent = "Renderer returned no SVG.";
+      notify(false, errorEl.textContent, 0, 0);
+      return;
+    }
+    if (!svg.getAttribute("preserveAspectRatio")) {
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    }
+    show("stage");
+    resetViewTransform();
+    window.requestAnimationFrame(applyViewTransform);
+    const size = measureSvg(svg);
+    notify(true, "", Math.round(size.width), Math.round(size.height));
+  }
+
   window.renderDiagram = function (source, theme) {
     const seq = ++renderSeq;
     const resolved = COLOR_THEMES[theme] ? theme : "redux-color";
@@ -235,42 +258,51 @@
 
     const text = (source || "").trim();
     if (!text) {
+      lastOkSource = null;
+      lastOkTheme = null;
+      lastOkSvg = null;
       viewportEl.innerHTML = "";
       show("empty");
       notify(true, "", 0, 0);
       return;
     }
 
-    mermaid
-      .render("mmd-" + Date.now() + "-" + seq, text)
-      .then(function (result) {
-        if (seq !== renderSeq) return;
-        viewportEl.innerHTML = result.svg || "";
-        const svg = currentSvg();
-        if (!svg) {
+    // Re-open / re-paste of identical source must still notify. mermaid.render
+    // can no-op or hang on a second pass of the same graph; replay the last SVG.
+    if (text === lastOkSource && resolved === lastOkTheme && lastOkSvg) {
+      presentSuccess(lastOkSvg, seq);
+      return;
+    }
+
+    try {
+      mermaid
+        .render("mmd-" + Date.now() + "-" + seq, text)
+        .then(function (result) {
+          if (seq !== renderSeq) return;
+          lastOkSource = text;
+          lastOkTheme = resolved;
+          lastOkSvg = result.svg || "";
+          presentSuccess(lastOkSvg, seq);
+        })
+        .catch(function (err) {
+          if (seq !== renderSeq) return;
+          lastOkSource = null;
+          lastOkTheme = null;
+          lastOkSvg = null;
+          viewportEl.innerHTML = "";
+          const message =
+            (err && (err.str || err.message)) || String(err) || "Could not render diagram.";
+          errorEl.textContent = message;
           show("error");
-          errorEl.textContent = "Renderer returned no SVG.";
-          notify(false, errorEl.textContent, 0, 0);
-          return;
-        }
-        if (!svg.getAttribute("preserveAspectRatio")) {
-          svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-        }
-        show("stage");
-        resetViewTransform();
-        window.requestAnimationFrame(applyViewTransform);
-        const size = measureSvg(svg);
-        notify(true, "", Math.round(size.width), Math.round(size.height));
-      })
-      .catch(function (err) {
-        if (seq !== renderSeq) return;
-        viewportEl.innerHTML = "";
-        const message =
-          (err && (err.str || err.message)) || String(err) || "Could not render diagram.";
-        errorEl.textContent = message;
-        show("error");
-        notify(false, message, 0, 0);
-      });
+          notify(false, message, 0, 0);
+        });
+    } catch (err) {
+      if (seq !== renderSeq) return;
+      const message = String(err && err.message ? err.message : err);
+      errorEl.textContent = message;
+      show("error");
+      notify(false, message, 0, 0);
+    }
   };
 
   window.exportSvg = function () {
