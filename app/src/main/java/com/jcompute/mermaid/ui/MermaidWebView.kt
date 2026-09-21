@@ -76,12 +76,24 @@ fun MermaidEngine(
                 }
                 addJavascriptInterface(bridge, "MermaidBridge")
                 controller.attach(this)
+                addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                    val width = right - left
+                    val height = bottom - top
+                    val oldWidth = oldRight - oldLeft
+                    val oldHeight = oldBottom - oldTop
+                    if (width != oldWidth || height != oldHeight) {
+                        controller.relayout()
+                    }
+                }
                 loadUrl("file:///android_asset/mermaid/index.html")
             }
         },
         update = { view ->
             controller.attach(view)
             view.setBackgroundColor(paper)
+        },
+        onRelease = { view ->
+            controller.detach(view)
         },
     )
 

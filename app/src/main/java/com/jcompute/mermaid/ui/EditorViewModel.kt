@@ -52,6 +52,7 @@ data class EditorUiState(
     val diagramTheme: DiagramTheme = DiagramTheme.Default,
     val renderEpoch: Long = 0,
     val selection: FileSelection = FileSelection(),
+    val immersiveView: Boolean = false,
 ) {
     val isDirty: Boolean get() = source != savedSource
     val fileName: String get() = currentFile?.name ?: "Untitled.mmd"
@@ -95,7 +96,24 @@ class EditorViewModel(
     }
 
     fun setMode(mode: EditorMode) {
-        _state.update { it.copy(mode = mode, screen = Screen.Document, selection = FileSelection()) }
+        _state.update { state ->
+            val chrome = ViewChrome.onMode(
+                currentMode = state.mode,
+                currentScreen = state.screen,
+                immersive = state.immersiveView,
+                requested = mode,
+            )
+            state.copy(
+                mode = chrome.mode,
+                screen = chrome.screen,
+                selection = FileSelection(),
+                immersiveView = chrome.immersive,
+            )
+        }
+    }
+
+    fun exitImmersiveView() {
+        _state.update { it.copy(immersiveView = false) }
     }
 
     fun showFiles() {
@@ -106,12 +124,13 @@ class EditorViewModel(
                 screen = Screen.Files,
                 files = files,
                 selection = state.selection.prune(existing),
+                immersiveView = false,
             )
         }
     }
 
     fun showDocument() {
-        _state.update { it.copy(screen = Screen.Document, selection = FileSelection()) }
+        _state.update { it.copy(screen = Screen.Document, selection = FileSelection(), immersiveView = false) }
     }
 
     fun setAppearance(value: Appearance) {
@@ -180,6 +199,7 @@ class EditorViewModel(
                 renderEpoch = pass.epoch,
                 isRendering = false,
                 selection = FileSelection(),
+                immersiveView = false,
             )
         }
     }
@@ -198,6 +218,7 @@ class EditorViewModel(
                 renderError = null,
                 previewPng = null,
                 selection = FileSelection(),
+                immersiveView = false,
             )
         }
         if (source.isBlank()) {
@@ -245,6 +266,7 @@ class EditorViewModel(
                     previewPng = null,
                     renderError = null,
                     selection = FileSelection(),
+                    immersiveView = false,
                 )
             }
         }
@@ -372,6 +394,7 @@ class EditorViewModel(
                 screen = Screen.Files,
                 files = store.list(),
                 selection = FileSelection(),
+                immersiveView = false,
             )
         }
         if (deletedCount <= 0) return

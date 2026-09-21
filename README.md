@@ -19,7 +19,7 @@ Paste and share-to-app are equal ingest paths.
 - **Edit ↔ View** toggle (one mode on screen; not a dual pane)
 - **Diagram theme** picker (mermaid.live Default = `redux-color`, Dark = `redux-dark-color`), remembered across launches; app chrome light/dark is separate
 - System light/dark chrome with a remembered override
-- View: pinch-zoom, double-tap to fit
+- View: pinch-zoom, double-tap to fit; tap **View** again for full-screen (Back or View exits); rotation relayouts the SVG
 - **Copy image to clipboard** (primary export)
 - **Save / Open `.mmd`** in app-private `filesDir/diagrams/`
 - Optional **Save as…** / **Open…** through Storage Access Framework

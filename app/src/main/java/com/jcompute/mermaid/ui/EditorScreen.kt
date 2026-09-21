@@ -2,6 +2,7 @@ package com.jcompute.mermaid.ui
 
 import android.content.ClipboardManager
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -12,8 +13,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -131,49 +135,67 @@ fun MermaidAppRoot(
             state.mode == EditorMode.View &&
             state.source.isNotBlank() &&
             state.renderError == null
+    val hideChrome =
+        state.immersiveView &&
+            state.screen == Screen.Document &&
+            state.mode == EditorMode.View
+
+    BackHandler(enabled = hideChrome) {
+        viewModel.exitImmersiveView()
+    }
 
     Scaffold(
+        contentWindowInsets = if (hideChrome) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            if (state.screen == Screen.Files) {
-                FilesTopBar(
-                    selection = state.selection,
-                    onCancelSelection = viewModel::cancelSelection,
-                    onDeleteSelected = { confirmBulkDelete = true },
-                )
-            } else {
-                DocumentTopBar(
-                    state = state,
-                    onPaste = ::paste,
-                    onCopyImage = viewModel::copyImage,
-                    onFit = viewModel.renderer::resetViewTransform,
-                    onSave = viewModel::save,
-                    onSaveAs = { saveAs.launch(state.fileName) },
-                    onOpen = {
-                        openDocument.launch(
-                            arrayOf(
-                                "text/plain",
-                                "text/markdown",
-                                "text/*",
-                                "*/*",
-                            ),
-                        )
-                    },
-                    onAppearance = viewModel::setAppearance,
-                    onDiagramTheme = viewModel::setDiagramTheme,
-                )
+            if (!hideChrome) {
+                if (state.screen == Screen.Files) {
+                    FilesTopBar(
+                        selection = state.selection,
+                        onCancelSelection = viewModel::cancelSelection,
+                        onDeleteSelected = { confirmBulkDelete = true },
+                    )
+                } else {
+                    DocumentTopBar(
+                        state = state,
+                        onPaste = ::paste,
+                        onCopyImage = viewModel::copyImage,
+                        onFit = viewModel.renderer::resetViewTransform,
+                        onSave = viewModel::save,
+                        onSaveAs = { saveAs.launch(state.fileName) },
+                        onOpen = {
+                            openDocument.launch(
+                                arrayOf(
+                                    "text/plain",
+                                    "text/markdown",
+                                    "text/*",
+                                    "*/*",
+                                ),
+                            )
+                        },
+                        onAppearance = viewModel::setAppearance,
+                        onDiagramTheme = viewModel::setDiagramTheme,
+                    )
+                }
             }
         },
         bottomBar = {
-            DocumentBottomBar(
-                screen = state.screen,
-                mode = state.mode,
-                onFiles = viewModel::showFiles,
-                onMode = viewModel::setMode,
-                onNew = viewModel::newDiagram,
-            )
+            if (hideChrome) {
+                ImmersiveViewBar(
+                    mode = state.mode,
+                    onMode = viewModel::setMode,
+                )
+            } else {
+                DocumentBottomBar(
+                    screen = state.screen,
+                    mode = state.mode,
+                    onFiles = viewModel::showFiles,
+                    onMode = viewModel::setMode,
+                    onNew = viewModel::newDiagram,
+                )
+            }
         },
         floatingActionButton = {
-            if (showLiveDiagram) {
+            if (showLiveDiagram && !hideChrome) {
                 ExtendedFloatingActionButton(
                     onClick = viewModel::copyImage,
                     icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
@@ -395,6 +417,33 @@ private fun DocumentBottomBar(
             icon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = "New") },
             label = { Text("New") },
         )
+    }
+}
+
+@Composable
+private fun ImmersiveViewBar(
+    mode: EditorMode,
+    onMode: (EditorMode) -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            SingleChoiceSegmentedButtonRow {
+                listOf(EditorMode.Edit to "Edit", EditorMode.View to "View").forEachIndexed { index, (value, label) ->
+                    SegmentedButton(
+                        selected = mode == value,
+                        onClick = { onMode(value) },
+                        shape = SegmentedButtonDefaults.itemShape(index, 2),
+                    ) {
+                        Text(label)
+                    }
+                }
+            }
+        }
     }
 }
 

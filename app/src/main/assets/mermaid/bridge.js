@@ -117,14 +117,16 @@
     if (!svg || !viewportEl) return;
     const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, viewScale || 1));
     const size = measureSvg(svg);
-    if (stageEl.clientWidth < 2) {
+    if (stageEl.clientWidth < 2 || stageEl.clientHeight < 2) {
       window.requestAnimationFrame(applyViewTransform);
       return;
     }
     const cs = window.getComputedStyle(stageEl);
     const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
     const stageW = Math.max(1, stageEl.clientWidth - padX);
-    const fit = stageW / size.width;
+    const stageH = Math.max(1, stageEl.clientHeight - padY);
+    const fit = Math.min(stageW / size.width, stageH / size.height);
     const displayW = size.width * fit * scale;
     const displayH = size.height * fit * scale;
     svg.style.maxWidth = "none";
@@ -324,9 +326,36 @@
       });
   };
 
-  window.addEventListener("resize", function () {
+  window.relayoutView = function () {
+    const w = Math.max(
+      window.innerWidth || 0,
+      (window.visualViewport && window.visualViewport.width) || 0,
+      document.documentElement.clientWidth || 0,
+    );
+    const h = Math.max(
+      window.innerHeight || 0,
+      (window.visualViewport && window.visualViewport.height) || 0,
+      document.documentElement.clientHeight || 0,
+    );
+    if (w > 1) {
+      document.documentElement.style.width = w + "px";
+      document.body.style.width = w + "px";
+    }
+    if (h > 1) {
+      document.documentElement.style.height = h + "px";
+      document.body.style.height = h + "px";
+    }
     if (currentSvg()) applyViewTransform();
+  };
+
+  window.addEventListener("resize", function () {
+    window.relayoutView();
   });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", function () {
+      window.relayoutView();
+    });
+  }
 
   let pinchStartDist = 0;
   let pinchStartScale = 1;

@@ -39,4 +39,14 @@ class MermaidBridgeConfigTest {
         assertTrue(js.contains("function presentSuccess"))
         assertTrue(js.contains("text === lastOkSource && resolved === lastOkTheme && lastOkSvg"))
     }
+
+    @Test
+    fun relayoutRefitsWithoutResettingZoom() {
+        val js = bridge()
+        assertTrue(js.contains("window.relayoutView"))
+        val relayout = js.substringAfter("window.relayoutView = function").substringBefore("window.addEventListener")
+        assertTrue(relayout.contains("applyViewTransform()"))
+        assertFalse(relayout.contains("resetViewTransform"))
+        assertTrue(js.contains("stageEl.clientHeight"))
+    }
 }

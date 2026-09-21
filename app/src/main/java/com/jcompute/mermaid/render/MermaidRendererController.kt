@@ -20,6 +20,7 @@ class MermaidRendererController {
     private val exportWaiters = ArrayDeque<(Result<Pair<String, String>>) -> Unit>()
 
     fun attach(view: WebView) {
+        ready = RendererAttach.isReady(sameView = webView === view, previouslyReady = ready)
         webView = view
     }
 
@@ -74,6 +75,14 @@ class MermaidRendererController {
         runWhenReady {
             val view = webView ?: return@runWhenReady
             view.evaluateJavascript("resetViewTransform();", null)
+        }
+    }
+
+    /** Refit the current SVG to the WebView bounds without a mermaid re-render. */
+    fun relayout() {
+        runWhenReady {
+            val view = webView ?: return@runWhenReady
+            view.evaluateJavascript("relayoutView();", null)
         }
     }
 
