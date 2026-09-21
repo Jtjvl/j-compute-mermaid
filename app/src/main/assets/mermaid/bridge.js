@@ -10,6 +10,10 @@
   const MIN_ZOOM = 0.5; // keep in sync with DiagramDisplay.MIN_ZOOM
   const MAX_ZOOM = 5; // keep in sync with DiagramDisplay.MAX_ZOOM
 
+  // mermaid.live pretty ER (Mermaid 12): rainbow entity strokes live only on
+  // redux-color / redux-dark-color. `dark` / `default` / `neutral` are mono.
+  const COLOR_THEMES = { "redux-color": true, "redux-dark-color": true };
+
   let lastTheme = null;
   let renderSeq = 0;
   let viewScale = 1;
@@ -48,33 +52,25 @@
     }
     if (lastTheme === theme) return;
     lastTheme = theme;
-    const dark = theme === "dark";
+    const dark = String(theme || "").indexOf("dark") !== -1;
     document.body.classList.toggle("dark", dark);
+    // Do not pass themeVariables (fontSize / darkMode): that merge washes
+    // borderColorArray so ER entities collapse to a single accent.
+    // Do not shrink er.entityPadding — mermaid.live uses 15 + neo look.
     mermaid.initialize({
       startOnLoad: false,
       theme: theme,
+      look: "neo",
+      layout: "elk",
       securityLevel: "strict",
-      // SVG text for ER (and most diagrams) stays sharp when the view box is resized.
       htmlLabels: false,
-      fontFamily: "ui-sans-serif, system-ui, sans-serif",
-      themeVariables: {
-        fontSize: "18px",
-        fontFamily: "ui-sans-serif, system-ui, sans-serif",
-        darkMode: dark,
-      },
       flowchart: { htmlLabels: true, curve: "basis", padding: 8, useMaxWidth: true },
       sequence: { actorMargin: 32, messageMargin: 28, useMaxWidth: true },
       class: { useMaxWidth: true },
       state: { useMaxWidth: true },
       pie: { useMaxWidth: true },
       gantt: { useMaxWidth: true },
-      er: {
-        useMaxWidth: true,
-        fontSize: 18,
-        entityPadding: 6,
-        diagramPadding: 8,
-        layoutDirection: "TB",
-      },
+      er: { useMaxWidth: true },
     });
   }
 
@@ -227,8 +223,9 @@
 
   window.renderDiagram = function (source, theme) {
     const seq = ++renderSeq;
+    const resolved = COLOR_THEMES[theme] ? theme : "redux-color";
     try {
-      configure(theme || "default");
+      configure(resolved);
     } catch (err) {
       show("error");
       errorEl.textContent = String(err && err.message ? err.message : err);

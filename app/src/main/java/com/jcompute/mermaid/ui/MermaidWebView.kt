@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.jcompute.mermaid.data.DiagramTheme
 import com.jcompute.mermaid.render.MermaidJsBridge
 import com.jcompute.mermaid.render.MermaidRendererController
 
@@ -18,12 +19,12 @@ import com.jcompute.mermaid.render.MermaidRendererController
 @Composable
 fun MermaidEngine(
     source: String,
-    darkTheme: Boolean,
+    diagramTheme: DiagramTheme,
     controller: MermaidRendererController,
     onRendered: (ok: Boolean, error: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val paper = if (darkTheme) 0xFF121212.toInt() else 0xFFFAFAFA.toInt()
+    val paper = diagramTheme.canvasArgb
     val bridge = remember(controller) {
         MermaidJsBridge(
             onReady = { controller.markReady() },
@@ -83,7 +84,7 @@ fun MermaidEngine(
         },
     )
 
-    LaunchedEffect(source, darkTheme) {
-        controller.render(source, darkTheme)
+    LaunchedEffect(source, diagramTheme) {
+        controller.render(source, diagramTheme.mermaidId)
     }
 }

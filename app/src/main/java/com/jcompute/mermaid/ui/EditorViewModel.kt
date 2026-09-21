@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.jcompute.mermaid.MermaidApp
 import com.jcompute.mermaid.data.Appearance
 import com.jcompute.mermaid.data.AppSettings
+import com.jcompute.mermaid.data.DiagramTheme
 import com.jcompute.mermaid.data.DiagramStore
 import com.jcompute.mermaid.data.MermaidIngest
 import com.jcompute.mermaid.data.StoredDiagram
@@ -48,7 +49,7 @@ data class EditorUiState(
     val previewPng: ByteArray? = null,
     val isExporting: Boolean = false,
     val appearance: Appearance = Appearance.System,
-    val darkCanvas: Boolean = false,
+    val diagramTheme: DiagramTheme = DiagramTheme.Default,
 ) {
     val isDirty: Boolean get() = source != savedSource
     val fileName: String get() = currentFile?.name ?: "Untitled.mmd"
@@ -68,7 +69,10 @@ class EditorViewModel(
     val renderer = MermaidRendererController()
 
     private val _state = MutableStateFlow(
-        EditorUiState(appearance = settings.appearance()),
+        EditorUiState(
+            appearance = settings.appearance(),
+            diagramTheme = settings.diagramTheme(),
+        ),
     )
     val state: StateFlow<EditorUiState> = _state.asStateFlow()
 
@@ -106,9 +110,16 @@ class EditorViewModel(
         _state.update { it.copy(appearance = value) }
     }
 
-    fun setDarkCanvas(dark: Boolean) {
-        if (_state.value.darkCanvas == dark) return
-        _state.update { it.copy(darkCanvas = dark, previewPng = null, isRendering = _state.value.source.isNotBlank()) }
+    fun setDiagramTheme(value: DiagramTheme) {
+        if (_state.value.diagramTheme == value) return
+        settings.setDiagramTheme(value)
+        _state.update {
+            it.copy(
+                diagramTheme = value,
+                previewPng = null,
+                isRendering = it.source.isNotBlank() && it.mode == EditorMode.View,
+            )
+        }
     }
 
     fun onRenderResult(ok: Boolean, error: String) {
@@ -130,7 +141,7 @@ class EditorViewModel(
             return
         }
         viewModelScope.launch {
-            val background = if (_state.value.darkCanvas) "#121212" else "#FAFAFA"
+            val background = _state.value.diagramTheme.canvasHex
             val density = getApplication<Application>().resources.displayMetrics.density
             val scale = DiagramDisplay.pngScale(density).toDouble()
             val bytes = runCatching { renderer.exportPng(scale = scale, background = background) }.getOrNull()
@@ -266,7 +277,7 @@ class EditorViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isExporting = true) }
             runCatching {
-                val background = if (_state.value.darkCanvas) "#121212" else "#FAFAFA"
+                val background = _state.value.diagramTheme.canvasHex
                 val density = getApplication<Application>().resources.displayMetrics.density
                 val scale = DiagramDisplay.pngScale(density).toDouble()
                 val bytes = _state.value.previewPng

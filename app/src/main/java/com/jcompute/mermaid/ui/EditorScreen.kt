@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +69,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -79,10 +81,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jcompute.mermaid.data.Appearance
+import com.jcompute.mermaid.data.DiagramTheme
 import com.jcompute.mermaid.data.StoredDiagram
 import com.jcompute.mermaid.intent.IncomingContent
-import com.jcompute.mermaid.ui.theme.PaperDark
-import com.jcompute.mermaid.ui.theme.PaperLight
 import java.text.DateFormat
 import java.util.Date
 
@@ -90,15 +91,11 @@ import java.util.Date
 @Composable
 fun MermaidAppRoot(
     viewModel: EditorViewModel,
-    darkTheme: Boolean,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-
-    LaunchedEffect(darkTheme) {
-        viewModel.setDarkCanvas(darkTheme)
-    }
+    val paper = Color(state.diagramTheme.canvasArgb)
 
     val openDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -137,7 +134,6 @@ fun MermaidAppRoot(
         viewModel.pasteFromClipboard(text)
     }
 
-    val paper = if (darkTheme) PaperDark else PaperLight
     val showLiveDiagram =
         state.screen == Screen.Document &&
             state.mode == EditorMode.View &&
@@ -164,6 +160,7 @@ fun MermaidAppRoot(
                     )
                 },
                 onAppearance = viewModel::setAppearance,
+                onDiagramTheme = viewModel::setDiagramTheme,
             )
         },
         bottomBar = {
@@ -195,7 +192,7 @@ fun MermaidAppRoot(
         ) {
             MermaidEngine(
                 source = state.source,
-                darkTheme = darkTheme,
+                diagramTheme = state.diagramTheme,
                 controller = viewModel.renderer,
                 onRendered = viewModel::onRenderResult,
                 modifier = Modifier
@@ -232,7 +229,6 @@ fun MermaidAppRoot(
             } else if (!showLiveDiagram) {
                 DocumentPane(
                     state = state,
-                    darkTheme = darkTheme,
                     onSourceChange = viewModel::onSourceChange,
                     onPaste = ::paste,
                     modifier = Modifier
@@ -262,6 +258,7 @@ private fun DocumentTopBar(
     onSaveAs: () -> Unit,
     onOpen: () -> Unit,
     onAppearance: (Appearance) -> Unit,
+    onDiagramTheme: (DiagramTheme) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
@@ -326,7 +323,14 @@ private fun DocumentTopBar(
                     )
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Appearance: ${state.appearance.name}") },
+                        text = { Text("Diagram: ${state.diagramTheme.menuLabel}") },
+                        leadingIcon = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                        onClick = {
+                            onDiagramTheme(state.diagramTheme.next())
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Chrome: ${state.appearance.name}") },
                         leadingIcon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
                         onClick = {
                             val next = when (state.appearance) {
@@ -381,7 +385,6 @@ private fun DocumentBottomBar(
 @Composable
 private fun DocumentPane(
     state: EditorUiState,
-    darkTheme: Boolean,
     onSourceChange: (String) -> Unit,
     onPaste: () -> Unit,
     modifier: Modifier = Modifier,
@@ -400,7 +403,6 @@ private fun DocumentPane(
         } else {
             ViewPane(
                 state = state,
-                darkTheme = darkTheme,
                 onPaste = onPaste,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -455,11 +457,10 @@ private fun SourceEditor(
 @Composable
 private fun ViewPane(
     state: EditorUiState,
-    darkTheme: Boolean,
     onPaste: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val paper = if (darkTheme) PaperDark else PaperLight
+    val paper = Color(state.diagramTheme.canvasArgb)
     Box(modifier) {
         when {
             state.source.isBlank() -> {

@@ -17,7 +17,8 @@ Paste and share-to-app are equal ingest paths.
 
 - **Paste** and **SEND** text ingest, including `.md` fences
 - **Edit ↔ View** toggle (one mode on screen; not a dual pane)
-- Mermaid **default** (light) / **dark** themes, system light/dark with a remembered override
+- **Diagram theme** picker (mermaid.live Default = `redux-color`, Dark = `redux-dark-color`), remembered across launches; app chrome light/dark is separate
+- System light/dark chrome with a remembered override
 - View: pinch-zoom, double-tap to fit
 - **Copy image to clipboard** (primary export)
 - **Save / Open `.mmd`** in app-private `filesDir/diagrams/`
@@ -32,7 +33,7 @@ PNG/SVG/share-sheet as primary actions, PDF, accounts, sync, theme store, plugin
 
 ## Architecture
 
-Rendering is **offline**. A hidden `WebView` loads bundled Mermaid 11.12.1 and is used only as the engine. View shows a native bitmap (pan/zoom). No `INTERNET` permission.
+Rendering is **offline**. A `WebView` loads bundled Mermaid 12.0.0 and is used as the engine. View is a live SVG (pinch-zoom / pan / Fit). No `INTERNET` permission.
 
 ```
 app/src/main/assets/mermaid/

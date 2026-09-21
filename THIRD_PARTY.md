@@ -3,7 +3,7 @@
 ## Mermaid
 
 - Project: https://github.com/mermaid-js/mermaid
-- Version bundled: 11.12.1 (`app/src/main/assets/mermaid/mermaid.min.js`)
+- Version bundled: 12.0.0 (`app/src/main/assets/mermaid/mermaid.min.js`)
 - License: MIT
 
 ```

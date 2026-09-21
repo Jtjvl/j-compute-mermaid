@@ -53,11 +53,10 @@ class MermaidRendererController {
         }
     }
 
-    fun render(source: String, dark: Boolean) {
+    fun render(source: String, mermaidTheme: String) {
         runWhenReady {
             val view = webView ?: return@runWhenReady
-            val theme = if (dark) "dark" else "default"
-            val script = "renderDiagram(${JSONObject.quote(source)}, ${JSONObject.quote(theme)});"
+            val script = "renderDiagram(${JSONObject.quote(source)}, ${JSONObject.quote(mermaidTheme)});"
             view.evaluateJavascript(script, null)
         }
     }
