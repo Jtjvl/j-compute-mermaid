@@ -60,7 +60,28 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`
 ./gradlew testDebugUnitTest
 ```
 
+Or one shot (build, unit tests, copy to `artifacts/`):
+
+```bash
+./scripts/publish-debug-apk.sh
+# optional: PUBLISH_RELEASE=1 ./scripts/publish-debug-apk.sh
+```
+
 minSdk 26. JDK 17+.
+
+## Install on a phone (debug APK)
+
+Latest debug build: [v0.1.0-debug](https://github.com/Jtjvl/j-compute-mermaid/releases/tag/v0.1.0-debug)
+
+1. Enable **Install unknown apps** for your browser (Settings → Apps → Special app access → Install unknown apps).
+2. On the phone, open the [release asset](https://github.com/Jtjvl/j-compute-mermaid/releases/download/v0.1.0-debug/app-debug.apk) while signed into GitHub (this repo is private).
+3. Install `app-debug.apk`.
+
+If the tap 404s, GitHub is not logged in on that browser. Desktop fallback:
+
+```bash
+gh release download v0.1.0-debug --repo Jtjvl/j-compute-mermaid --pattern '*.apk'
+```
 
 ## Ingest
 
