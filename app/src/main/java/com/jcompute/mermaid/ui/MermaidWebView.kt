@@ -1,7 +1,6 @@
 package com.jcompute.mermaid.ui
 
 import android.annotation.SuppressLint
-import android.graphics.Color
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -24,6 +23,7 @@ fun MermaidEngine(
     onRendered: (ok: Boolean, error: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val paper = if (darkTheme) 0xFF121212.toInt() else 0xFFFAFAFA.toInt()
     val bridge = remember(controller) {
         MermaidJsBridge(
             onReady = { controller.markReady() },
@@ -36,8 +36,23 @@ fun MermaidEngine(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(400, 400)
-                setBackgroundColor(Color.TRANSPARENT)
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+                setBackgroundColor(paper)
+                setInitialScale(100)
+                overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                isClickable = true
+                isFocusable = false
+                isFocusableInTouchMode = false
+                isNestedScrollingEnabled = false
+                setOnTouchListener { view, _ ->
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                    false
+                }
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = true
@@ -45,8 +60,11 @@ fun MermaidEngine(
                 settings.cacheMode = WebSettings.LOAD_NO_CACHE
                 settings.blockNetworkLoads = true
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                isFocusable = false
-                isFocusableInTouchMode = false
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
+                settings.setSupportZoom(false)
+                settings.builtInZoomControls = false
+                settings.displayZoomControls = false
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(
@@ -59,7 +77,10 @@ fun MermaidEngine(
                 loadUrl("file:///android_asset/mermaid/index.html")
             }
         },
-        update = { view -> controller.attach(view) },
+        update = { view ->
+            controller.attach(view)
+            view.setBackgroundColor(paper)
+        },
     )
 
     LaunchedEffect(source, darkTheme) {

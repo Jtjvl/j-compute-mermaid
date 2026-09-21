@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.automirrored.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Save
@@ -36,6 +38,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jcompute.mermaid.data.Appearance
 import com.jcompute.mermaid.data.StoredDiagram
@@ -133,12 +137,20 @@ fun MermaidAppRoot(
         viewModel.pasteFromClipboard(text)
     }
 
+    val paper = if (darkTheme) PaperDark else PaperLight
+    val showLiveDiagram =
+        state.screen == Screen.Document &&
+            state.mode == EditorMode.View &&
+            state.source.isNotBlank() &&
+            state.renderError == null
+
     Scaffold(
         topBar = {
             DocumentTopBar(
                 state = state,
                 onPaste = ::paste,
                 onCopyImage = viewModel::copyImage,
+                onFit = viewModel.renderer::resetViewTransform,
                 onSave = viewModel::save,
                 onSaveAs = { saveAs.launch(state.fileName) },
                 onOpen = {
@@ -163,6 +175,15 @@ fun MermaidAppRoot(
                 onNew = viewModel::newDiagram,
             )
         },
+        floatingActionButton = {
+            if (showLiveDiagram) {
+                ExtendedFloatingActionButton(
+                    onClick = viewModel::copyImage,
+                    icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                    text = { Text("Copy image") },
+                )
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.surface,
     ) { padding ->
@@ -178,28 +199,52 @@ fun MermaidAppRoot(
                 controller = viewModel.renderer,
                 onRendered = viewModel::onRenderResult,
                 modifier = Modifier
-                    .size(360.dp)
-                    .offset(x = (-2400).dp),
+                    .fillMaxSize()
+                    .background(paper)
+                    .zIndex(if (showLiveDiagram) 1f else 0f)
+                    .then(
+                        if (showLiveDiagram) {
+                            Modifier
+                        } else {
+                            Modifier.offset(x = (-5000).dp)
+                        },
+                    ),
             )
             if (state.screen == Screen.Files) {
-                FilesPane(
-                    files = state.files,
-                    currentPath = state.currentFile?.canonicalPath,
-                    onOpen = viewModel::openStored,
-                    onDelete = viewModel::deleteStored,
-                    onPaste = ::paste,
-                    onOpenExternal = {
-                        openDocument.launch(arrayOf("text/plain", "text/markdown", "text/*", "*/*"))
-                    },
-                    onNew = viewModel::newDiagram,
-                )
-            } else {
+                Surface(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(2f),
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    FilesPane(
+                        files = state.files,
+                        currentPath = state.currentFile?.canonicalPath,
+                        onOpen = viewModel::openStored,
+                        onDelete = viewModel::deleteStored,
+                        onPaste = ::paste,
+                        onOpenExternal = {
+                            openDocument.launch(arrayOf("text/plain", "text/markdown", "text/*", "*/*"))
+                        },
+                        onNew = viewModel::newDiagram,
+                    )
+                }
+            } else if (!showLiveDiagram) {
                 DocumentPane(
                     state = state,
                     darkTheme = darkTheme,
                     onSourceChange = viewModel::onSourceChange,
                     onPaste = ::paste,
-                    onCopyImage = viewModel::copyImage,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2f),
+                )
+            }
+            if (showLiveDiagram && state.isRendering) {
+                CircularProgressIndicator(
+                    Modifier
+                        .align(Alignment.Center)
+                        .zIndex(3f),
                 )
             }
         }
@@ -212,6 +257,7 @@ private fun DocumentTopBar(
     state: EditorUiState,
     onPaste: () -> Unit,
     onCopyImage: () -> Unit,
+    onFit: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onOpen: () -> Unit,
@@ -233,7 +279,10 @@ private fun DocumentTopBar(
             IconButton(onClick = onPaste) {
                 Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste")
             }
-            if (state.mode == EditorMode.View && state.screen == Screen.Document) {
+            if (state.mode == EditorMode.View && state.screen == Screen.Document && state.source.isNotBlank()) {
+                IconButton(onClick = onFit) {
+                    Icon(Icons.Outlined.FitScreen, contentDescription = "Fit to screen")
+                }
                 if (state.isExporting) {
                     CircularProgressIndicator(
                         modifier = Modifier
@@ -335,12 +384,12 @@ private fun DocumentPane(
     darkTheme: Boolean,
     onSourceChange: (String) -> Unit,
     onPaste: () -> Unit,
-    onCopyImage: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     AnimatedContent(
         targetState = state.mode,
         label = "edit-view",
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
     ) { mode ->
         if (mode == EditorMode.Edit) {
             SourceEditor(
@@ -353,7 +402,6 @@ private fun DocumentPane(
                 state = state,
                 darkTheme = darkTheme,
                 onPaste = onPaste,
-                onCopyImage = onCopyImage,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -409,47 +457,30 @@ private fun ViewPane(
     state: EditorUiState,
     darkTheme: Boolean,
     onPaste: () -> Unit,
-    onCopyImage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val paper = if (darkTheme) PaperDark else PaperLight
     Box(modifier) {
         when {
             state.source.isBlank() -> {
-                EmptyView(onPaste = onPaste, modifier = Modifier.fillMaxSize())
-            }
-            state.renderError != null -> {
-                Text(
-                    text = state.renderError,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(20.dp),
-                )
-            }
-            else -> {
-                ZoomableDiagram(
-                    png = state.previewPng,
-                    paper = paper,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (state.isRendering || (state.previewPng == null && state.renderError == null)) {
-                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                Surface(Modifier.fillMaxSize(), color = paper) {
+                    EmptyView(onPaste = onPaste, modifier = Modifier.fillMaxSize())
                 }
             }
-        }
-        if (state.previewPng != null && state.renderError == null && state.source.isNotBlank()) {
-            Button(
-                onClick = onCopyImage,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(20.dp)
-                    .height(48.dp),
-            ) {
-                Icon(Icons.Outlined.ContentCopy, contentDescription = null)
-                Spacer(Modifier.size(8.dp))
-                Text("Copy image")
+            state.renderError != null -> {
+                Surface(Modifier.fillMaxSize(), color = paper) {
+                    Text(
+                        text = state.renderError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.padding(20.dp),
+                    )
+                }
+            }
+            else -> {
+                if (state.isRendering) {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                }
             }
         }
     }

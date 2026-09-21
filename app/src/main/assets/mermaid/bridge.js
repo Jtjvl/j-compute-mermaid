@@ -5,9 +5,16 @@
   const emptyEl = document.getElementById("empty");
   const errorEl = document.getElementById("error");
   const stageEl = document.getElementById("stage");
+  const viewportEl = document.getElementById("viewport");
+
+  const MIN_ZOOM = 0.5; // keep in sync with DiagramDisplay.MIN_ZOOM
+  const MAX_ZOOM = 5; // keep in sync with DiagramDisplay.MAX_ZOOM
 
   let lastTheme = null;
   let renderSeq = 0;
+  let viewScale = 1;
+  let viewX = 0;
+  let viewY = 0;
 
   function notify(ok, error, width, height) {
     try {
@@ -41,15 +48,33 @@
     }
     if (lastTheme === theme) return;
     lastTheme = theme;
-    document.body.classList.toggle("dark", theme === "dark");
+    const dark = theme === "dark";
+    document.body.classList.toggle("dark", dark);
     mermaid.initialize({
       startOnLoad: false,
       theme: theme,
       securityLevel: "strict",
+      // SVG text for ER (and most diagrams) stays sharp when the view box is resized.
+      htmlLabels: false,
       fontFamily: "ui-sans-serif, system-ui, sans-serif",
-      flowchart: { htmlLabels: true, curve: "basis", padding: 12 },
-      sequence: { actorMargin: 40, messageMargin: 32 },
+      themeVariables: {
+        fontSize: "18px",
+        fontFamily: "ui-sans-serif, system-ui, sans-serif",
+        darkMode: dark,
+      },
+      flowchart: { htmlLabels: true, curve: "basis", padding: 8, useMaxWidth: true },
+      sequence: { actorMargin: 32, messageMargin: 28, useMaxWidth: true },
       class: { useMaxWidth: true },
+      state: { useMaxWidth: true },
+      pie: { useMaxWidth: true },
+      gantt: { useMaxWidth: true },
+      er: {
+        useMaxWidth: true,
+        fontSize: 18,
+        entityPadding: 6,
+        diagramPadding: 8,
+        layoutDirection: "TB",
+      },
     });
   }
 
@@ -69,46 +94,120 @@
       }
     }
     if (!width || !height) {
+      const attrW = parseFloat(svg.getAttribute("width"));
+      const attrH = parseFloat(svg.getAttribute("height"));
+      if (attrW && attrH && !String(svg.getAttribute("width") || "").includes("%")) {
+        width = width || attrW;
+        height = height || attrH;
+      }
+    }
+    if (!width || !height) {
       const rect = svg.getBoundingClientRect();
       width = width || rect.width;
       height = height || rect.height;
     }
-    return { width: Math.round(width), height: Math.round(height) };
+    return { width: Math.max(1, width), height: Math.max(1, height) };
   }
 
   function currentSvg() {
-    return stageEl.querySelector("svg");
+    return viewportEl.querySelector("svg");
   }
+
+  function applyViewTransform() {
+    const svg = currentSvg();
+    if (!svg || !viewportEl) return;
+    const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, viewScale || 1));
+    const size = measureSvg(svg);
+    if (stageEl.clientWidth < 2) {
+      window.requestAnimationFrame(applyViewTransform);
+      return;
+    }
+    const cs = window.getComputedStyle(stageEl);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const stageW = Math.max(1, stageEl.clientWidth - padX);
+    const fit = stageW / size.width;
+    const displayW = size.width * fit * scale;
+    const displayH = size.height * fit * scale;
+    svg.style.maxWidth = "none";
+    svg.style.width = displayW + "px";
+    svg.style.height = displayH + "px";
+    svg.removeAttribute("width");
+    svg.removeAttribute("height");
+    viewportEl.style.transform =
+      "translate(" + (viewX || 0) + "px, " + (viewY || 0) + "px)";
+  }
+
+  function resetViewTransform() {
+    viewScale = 1;
+    viewX = 0;
+    viewY = 0;
+    applyViewTransform();
+  }
+
+  window.setViewTransform = function (scale, x, y) {
+    viewScale = scale;
+    viewX = x;
+    viewY = y;
+    applyViewTransform();
+  };
+
+  window.resetViewTransform = resetViewTransform;
 
   function serializeSvg(svg) {
     if (!svg) return "";
     const clone = svg.cloneNode(true);
+    clone.style.maxWidth = "";
+    clone.style.width = "";
+    clone.style.height = "";
+    clone.style.transform = "";
     if (!clone.getAttribute("xmlns")) {
       clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     }
     if (!clone.getAttribute("xmlns:xlink")) {
       clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
     }
+    const size = measureSvg(svg);
+    clone.setAttribute("width", String(size.width));
+    clone.setAttribute("height", String(size.height));
+    if (!clone.getAttribute("viewBox")) {
+      clone.setAttribute("viewBox", "0 0 " + size.width + " " + size.height);
+    }
     return new XMLSerializer().serializeToString(clone);
   }
 
   function svgToPngDataUrl(svg, scale, background) {
     return new Promise(function (resolve, reject) {
-      const xml = serializeSvg(svg);
+      const size = measureSvg(svg);
+      const bake = Math.max(2, Number(scale) || 2);
+      const w = Math.max(1, Math.round(size.width * bake));
+      const h = Math.max(1, Math.round(size.height * bake));
+      const clone = svg.cloneNode(true);
+      clone.style.maxWidth = "none";
+      clone.style.width = w + "px";
+      clone.style.height = h + "px";
+      clone.style.transform = "";
+      clone.setAttribute("width", String(w));
+      clone.setAttribute("height", String(h));
+      if (!clone.getAttribute("xmlns")) {
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      }
+      if (!clone.getAttribute("xmlns:xlink")) {
+        clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+      }
+      const xml = new XMLSerializer().serializeToString(clone);
       if (!xml) {
         reject(new Error("No SVG to export"));
         return;
       }
-      const size = measureSvg(svg);
       const img = new Image();
       img.onload = function () {
         try {
           const canvas = document.createElement("canvas");
-          const w = Math.max(1, Math.round((img.width || size.width || 1) * scale));
-          const h = Math.max(1, Math.round((img.height || size.height || 1) * scale));
           canvas.width = w;
           canvas.height = h;
           const ctx = canvas.getContext("2d");
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
           if (background) {
             ctx.fillStyle = background;
             ctx.fillRect(0, 0, w, h);
@@ -139,7 +238,7 @@
 
     const text = (source || "").trim();
     if (!text) {
-      stageEl.innerHTML = "";
+      viewportEl.innerHTML = "";
       show("empty");
       notify(true, "", 0, 0);
       return;
@@ -149,7 +248,7 @@
       .render("mmd-" + Date.now() + "-" + seq, text)
       .then(function (result) {
         if (seq !== renderSeq) return;
-        stageEl.innerHTML = result.svg || "";
+        viewportEl.innerHTML = result.svg || "";
         const svg = currentSvg();
         if (!svg) {
           show("error");
@@ -157,13 +256,18 @@
           notify(false, errorEl.textContent, 0, 0);
           return;
         }
+        if (!svg.getAttribute("preserveAspectRatio")) {
+          svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        }
         show("stage");
+        resetViewTransform();
+        window.requestAnimationFrame(applyViewTransform);
         const size = measureSvg(svg);
-        notify(true, "", size.width, size.height);
+        notify(true, "", Math.round(size.width), Math.round(size.height));
       })
       .catch(function (err) {
         if (seq !== renderSeq) return;
-        stageEl.innerHTML = "";
+        viewportEl.innerHTML = "";
         const message =
           (err && (err.str || err.message)) || String(err) || "Could not render diagram.";
         errorEl.textContent = message;
@@ -190,6 +294,109 @@
         notifyExport("error", String(err && err.message ? err.message : err));
       });
   };
+
+  window.addEventListener("resize", function () {
+    if (currentSvg()) applyViewTransform();
+  });
+
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+  let panLast = null;
+  let lastTapAt = 0;
+  let lastTapX = 0;
+  let lastTapY = 0;
+
+  function touchPoints(event) {
+    const points = [];
+    for (let i = 0; i < event.touches.length; i++) {
+      points.push({
+        x: event.touches[i].clientX,
+        y: event.touches[i].clientY,
+      });
+    }
+    return points;
+  }
+
+  function touchDistance(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function touchMid(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  function onTouchStart(event) {
+    if (!currentSvg()) return;
+    event.preventDefault();
+    const points = touchPoints(event);
+    if (points.length >= 2) {
+      pinchStartDist = touchDistance(points[0], points[1]);
+      pinchStartScale = viewScale;
+      panLast = touchMid(points[0], points[1]);
+      lastTapAt = 0;
+      return;
+    }
+    if (points.length === 1) {
+      panLast = { x: points[0].x, y: points[0].y };
+      const now = Date.now();
+      if (
+        now - lastTapAt < 280 &&
+        Math.hypot(points[0].x - lastTapX, points[0].y - lastTapY) < 48
+      ) {
+        resetViewTransform();
+        lastTapAt = 0;
+        panLast = null;
+      } else {
+        lastTapAt = now;
+        lastTapX = points[0].x;
+        lastTapY = points[0].y;
+      }
+    }
+  }
+
+  function onTouchMove(event) {
+    if (!currentSvg()) return;
+    event.preventDefault();
+    const points = touchPoints(event);
+    if (points.length >= 2) {
+      const dist = touchDistance(points[0], points[1]);
+      if (pinchStartDist > 1) {
+        viewScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartScale * (dist / pinchStartDist)));
+      }
+      const mid = touchMid(points[0], points[1]);
+      if (panLast) {
+        viewX += mid.x - panLast.x;
+        viewY += mid.y - panLast.y;
+      }
+      panLast = mid;
+      applyViewTransform();
+      return;
+    }
+    if (points.length === 1 && panLast) {
+      viewX += points[0].x - panLast.x;
+      viewY += points[0].y - panLast.y;
+      panLast = { x: points[0].x, y: points[0].y };
+      applyViewTransform();
+    }
+  }
+
+  function onTouchEnd(event) {
+    if (event.touches.length === 0) {
+      panLast = null;
+      pinchStartDist = 0;
+      return;
+    }
+    if (event.touches.length === 1) {
+      panLast = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      pinchStartDist = 0;
+      pinchStartScale = viewScale;
+    }
+  }
+
+  stageEl.addEventListener("touchstart", onTouchStart, { passive: false });
+  stageEl.addEventListener("touchmove", onTouchMove, { passive: false });
+  stageEl.addEventListener("touchend", onTouchEnd, { passive: false });
+  stageEl.addEventListener("touchcancel", onTouchEnd, { passive: false });
 
   function ready() {
     try {

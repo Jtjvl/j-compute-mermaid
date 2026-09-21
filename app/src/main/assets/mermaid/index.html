@@ -2,31 +2,52 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=8, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>Mermaid renderer</title>
     <style>
         html, body {
             margin: 0;
             padding: 0;
             width: 100%;
-            min-height: 100%;
-            background: transparent;
-            overflow: auto;
+            height: 100%;
+            background: #FAFAFA;
+            overflow: hidden;
+            touch-action: none;
+        }
+        body.dark {
+            background: #121212;
         }
         body {
             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
         }
         #stage {
-            min-height: 100vh;
+            position: relative;
+            width: 100%;
+            height: 100%;
             box-sizing: border-box;
+            overflow: hidden;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 10px 16px;
+        }
+        #viewport {
+            transform-origin: center center;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px 16px 32px;
+            will-change: transform;
         }
-        #stage svg {
+        #viewport svg {
+            display: block;
             max-width: 100%;
             height: auto;
+            shape-rendering: geometricPrecision;
+            text-rendering: geometricPrecision;
+        }
+        body.dark #viewport svg {
+            /* Keep strokes/text from dissolving into the dark paper when rasterized. */
+            shape-rendering: geometricPrecision;
         }
         #empty, #error {
             display: none;
@@ -52,7 +73,7 @@
 <body>
     <div id="empty">Write a diagram in Edit, then switch to View.</div>
     <div id="error"></div>
-    <div id="stage"></div>
+    <div id="stage"><div id="viewport"></div></div>
     <script src="mermaid.min.js"></script>
     <script src="bridge.js"></script>
 </body>

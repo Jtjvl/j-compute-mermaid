@@ -131,7 +131,9 @@ class EditorViewModel(
         }
         viewModelScope.launch {
             val background = if (_state.value.darkCanvas) "#121212" else "#FAFAFA"
-            val bytes = runCatching { renderer.exportPng(scale = 2.0, background = background) }.getOrNull()
+            val density = getApplication<Application>().resources.displayMetrics.density
+            val scale = DiagramDisplay.pngScale(density).toDouble()
+            val bytes = runCatching { renderer.exportPng(scale = scale, background = background) }.getOrNull()
             _state.update { it.copy(previewPng = bytes) }
         }
     }
@@ -265,8 +267,10 @@ class EditorViewModel(
             _state.update { it.copy(isExporting = true) }
             runCatching {
                 val background = if (_state.value.darkCanvas) "#121212" else "#FAFAFA"
+                val density = getApplication<Application>().resources.displayMetrics.density
+                val scale = DiagramDisplay.pngScale(density).toDouble()
                 val bytes = _state.value.previewPng
-                    ?: renderer.exportPng(scale = 2.0, background = background)
+                    ?: renderer.exportPng(scale = scale, background = background)
                 val uri = exportWriter.writeClipboardPng(bytes)
                 val context = getApplication<Application>()
                 val clipboard = context.getSystemService(ClipboardManager::class.java)

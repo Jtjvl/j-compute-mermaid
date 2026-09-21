@@ -62,6 +62,22 @@ class MermaidRendererController {
         }
     }
 
+    fun setViewTransform(scale: Float, xCss: Float, yCss: Float) {
+        runWhenReady {
+            val view = webView ?: return@runWhenReady
+            val script =
+                "setViewTransform(${scale.toDouble()}, ${xCss.toDouble()}, ${yCss.toDouble()});"
+            view.evaluateJavascript(script, null)
+        }
+    }
+
+    fun resetViewTransform() {
+        runWhenReady {
+            val view = webView ?: return@runWhenReady
+            view.evaluateJavascript("resetViewTransform();", null)
+        }
+    }
+
     suspend fun exportSvg(): ByteArray {
         val payload = requestExport("exportSvg();")
         if (payload.isBlank()) error("Renderer returned an empty SVG.")
