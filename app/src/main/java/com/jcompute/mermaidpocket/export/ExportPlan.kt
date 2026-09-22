@@ -17,6 +17,14 @@ enum class ExportFormat(
     Mmd("text/plain", "mmd", ".mmd", false),
 }
 
+/** Order shown when Save or Share is pressed. */
+val ExportOptionOrder = listOf(
+    ExportFormat.Png,
+    ExportFormat.Svg,
+    ExportFormat.Jpeg,
+    ExportFormat.Mmd,
+)
+
 object ExportNames {
     fun fileName(sourceName: String, format: ExportFormat): String {
         val leaf = sourceName.substringAfterLast('/').substringAfterLast('\\').trim()

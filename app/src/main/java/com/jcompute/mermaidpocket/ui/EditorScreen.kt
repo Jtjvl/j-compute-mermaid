@@ -41,7 +41,9 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,6 +97,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jcompute.mermaidpocket.R
 import com.jcompute.mermaidpocket.data.Appearance
 import com.jcompute.mermaidpocket.data.DiagramTheme
+import com.jcompute.mermaidpocket.data.DurableDocuments
 import com.jcompute.mermaidpocket.export.ExportDelivery
 import com.jcompute.mermaidpocket.export.ExportFormat
 import com.jcompute.mermaidpocket.export.ExportNames
@@ -129,8 +132,12 @@ fun MermaidAppRoot(
         }
     }
 
-    var pendingRaster by remember { mutableStateOf<Pair<ExportFormat, ExportDelivery>?>(null) }
+    var pendingExport by remember { mutableStateOf<ExportDelivery?>(null) }
     var pendingRasterWidth by remember { mutableStateOf<Int?>(null) }
+
+    val chooseDiagramFolder = rememberLauncherForActivityResult(PersistableTreeContract()) { uri: Uri? ->
+        if (uri != null) viewModel.grantDiagramFolder(uri)
+    }
 
     val saveAs = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain"),
@@ -174,20 +181,17 @@ fun MermaidAppRoot(
         }
     }
 
-    fun beginExport(format: ExportFormat, delivery: ExportDelivery) {
-        if (format.sized) {
-            pendingRaster = format to delivery
-            return
-        }
-        if (delivery == ExportDelivery.Share) {
-            viewModel.shareExport(format, widthPx = null)
-            return
+    fun launchSaf(format: ExportFormat, widthPx: Int?) {
+        if (widthPx != null) {
+            pendingRasterWidth = widthPx
+            viewModel.stageExportWidth(widthPx)
         }
         val name = ExportNames.fileName(state.fileName, format)
         when (format) {
             ExportFormat.Svg -> saveSvg.launch(name)
             ExportFormat.Mmd -> saveAs.launch(name)
-            ExportFormat.Png, ExportFormat.Jpeg -> Unit
+            ExportFormat.Png -> savePng.launch(name)
+            ExportFormat.Jpeg -> saveJpeg.launch(name)
         }
     }
 
@@ -234,9 +238,9 @@ fun MermaidAppRoot(
                         onRedo = viewModel::redo,
                         onCopyImage = viewModel::copyImage,
                         onFit = viewModel.renderer::resetViewTransform,
-                        onSave = viewModel::save,
-                        onSaveAs = { beginExport(ExportFormat.Mmd, ExportDelivery.Save) },
-                        onExport = ::beginExport,
+                        onSave = { pendingExport = ExportDelivery.Save },
+                        onShare = { pendingExport = ExportDelivery.Share },
+                        onDiagramFolder = { chooseDiagramFolder.launch(viewModel.suggestedDiagramFolder()) },
                         onOpen = {
                             openDocument.launch(
                                 arrayOf(
@@ -352,28 +356,47 @@ fun MermaidAppRoot(
         }
     }
 
-    pendingRaster?.let { (format, delivery) ->
-        ExportWidthDialog(
-            format = format,
+    pendingExport?.let { delivery ->
+        ExportOptionsDialog(
+            delivery = delivery,
             initialWidth = viewModel.exportWidth(),
             sourceWidth = state.diagramWidth,
             sourceHeight = state.diagramHeight,
-            onConfirm = { px ->
-                pendingRasterWidth = px
-                viewModel.stageExportWidth(px)
-                pendingRaster = null
+            onConfirm = { format, width ->
+                pendingExport = null
                 if (delivery == ExportDelivery.Share) {
-                    viewModel.shareExport(format, px)
+                    viewModel.shareExport(format, width)
+                } else if (format == ExportFormat.Mmd) {
+                    viewModel.save()
                 } else {
-                    val name = ExportNames.fileName(state.fileName, format)
-                    when (format) {
-                        ExportFormat.Png -> savePng.launch(name)
-                        ExportFormat.Jpeg -> saveJpeg.launch(name)
-                        else -> Unit
-                    }
+                    launchSaf(format, width)
                 }
             },
-            onDismiss = { pendingRaster = null },
+            onSaveCopy = { format ->
+                pendingExport = null
+                launchSaf(format, widthPx = null)
+            },
+            onDismiss = { pendingExport = null },
+        )
+    }
+
+    if (state.askForDiagramFolder && pendingExport == null) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissFolderPrompt,
+            title = { Text("Keep diagrams") },
+            text = {
+                Text(
+                    "Choose ${DurableDocuments.DISPLAY_PATH}. .mmd files there stay on this device after you uninstall MermaidPocket. After you reinstall, choose the same folder. If you only see Documents, choose that and the app uses MermaidPocket inside it.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { chooseDiagramFolder.launch(viewModel.suggestedDiagramFolder()) },
+                ) { Text("Choose folder") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissFolderPrompt) { Text("Not now") }
+            },
         )
     }
 
@@ -400,8 +423,8 @@ private fun DocumentTopBar(
     onCopyImage: () -> Unit,
     onFit: () -> Unit,
     onSave: () -> Unit,
-    onSaveAs: () -> Unit,
-    onExport: (ExportFormat, ExportDelivery) -> Unit,
+    onShare: () -> Unit,
+    onDiagramFolder: () -> Unit,
     onOpen: () -> Unit,
     onAppearance: (Appearance) -> Unit,
     onDiagramTheme: (DiagramTheme) -> Unit,
@@ -458,7 +481,7 @@ private fun DocumentTopBar(
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Save .mmd") },
+                        text = { Text("Save") },
                         leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null) },
                         onClick = {
                             menuOpen = false
@@ -466,60 +489,11 @@ private fun DocumentTopBar(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Save .mmd as…") },
+                        text = { Text("Share") },
+                        leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
                         onClick = {
                             menuOpen = false
-                            onSaveAs()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Share .mmd") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Mmd, ExportDelivery.Share)
-                        },
-                    )
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Share PNG") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Png, ExportDelivery.Share)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Save PNG…") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Png, ExportDelivery.Save)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Share JPEG") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Jpeg, ExportDelivery.Share)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Save JPEG…") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Jpeg, ExportDelivery.Save)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Share SVG") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Svg, ExportDelivery.Share)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Save SVG…") },
-                        onClick = {
-                            menuOpen = false
-                            onExport(ExportFormat.Svg, ExportDelivery.Save)
+                            onShare()
                         },
                     )
                     DropdownMenuItem(
@@ -528,6 +502,14 @@ private fun DocumentTopBar(
                         onClick = {
                             menuOpen = false
                             onOpen()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Diagram folder…") },
+                        leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onDiagramFolder()
                         },
                     )
                     HorizontalDivider()

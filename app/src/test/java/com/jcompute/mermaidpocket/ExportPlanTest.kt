@@ -2,6 +2,7 @@ package com.jcompute.mermaidpocket
 
 import com.jcompute.mermaidpocket.export.ExportFormat
 import com.jcompute.mermaidpocket.export.ExportNames
+import com.jcompute.mermaidpocket.export.ExportOptionOrder
 import com.jcompute.mermaidpocket.export.ExportSize
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -46,28 +47,43 @@ class ExportPlanTest {
     }
 
     @Test
-    fun menuOffersPngSvgJpegAndMmdBesideClipboardCopy() {
+    fun menuOffersOneSaveAndOneShareWithFormatsOnPress() {
         assertEquals(
             listOf(ExportFormat.Png, ExportFormat.Jpeg, ExportFormat.Svg, ExportFormat.Mmd),
             ExportFormat.entries,
         )
-        val menu = sourceFile("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorScreen.kt")
+        assertEquals(
+            listOf(ExportFormat.Png, ExportFormat.Svg, ExportFormat.Jpeg, ExportFormat.Mmd),
+            ExportOptionOrder,
+        )
+        val screen = sourceFile("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorScreen.kt")
+        val topBar = screen.substringAfter("private fun DocumentTopBar")
+            .substringBefore("private fun DocumentBottomBar")
+        assertEquals(1, Regex("""Text\("Save"\)""").findAll(topBar).count())
+        assertEquals(1, Regex("""Text\("Share"\)""").findAll(topBar).count())
         for (label in listOf(
             "Share PNG",
-            "Save PNG…",
+            "Save PNG",
             "Share SVG",
-            "Save SVG…",
+            "Save SVG",
             "Share JPEG",
-            "Save JPEG…",
+            "Save JPEG",
             "Share .mmd",
-            "Save .mmd as…",
-            "Copy image",
+            "Save .mmd as",
         )) {
-            assertTrue(menu.contains(label))
+            assertFalse(screen.contains(label))
         }
-        assertTrue(menu.contains("onCopyImage"))
-        assertFalse(menu.contains("WebP"))
-        assertFalse(menu.contains("image/webp"))
+        assertTrue(screen.contains("Copy all"))
+        assertTrue(screen.contains("onCopyImage"))
+        assertTrue(screen.contains("CreateDocument"))
+        assertTrue(screen.contains("ACTION_SEND"))
+        assertFalse(screen.contains("WebP"))
+        assertFalse(screen.contains("image/webp"))
+        val dialog = sourceFile("app/src/main/java/com/jcompute/mermaidpocket/ui/ExportWidthDialog.kt")
+        assertTrue(dialog.contains("ExportOptionOrder"))
+        assertTrue(dialog.contains("Slider"))
+        assertTrue(dialog.contains("Save a copy"))
+        assertTrue(dialog.contains("approxLabel"))
     }
 
     private fun sourceFile(relative: String): String {

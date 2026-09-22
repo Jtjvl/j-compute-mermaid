@@ -10,12 +10,12 @@ data class StoredDiagram(
 )
 
 /**
- * Plain UTF-8 `.mmd` files in [filesDir]`/diagrams`.
+ * Working copies of plain UTF-8 `.mmd` files in [filesDir]`/diagrams`.
  *
- * This is internal app storage (`Context.getFilesDir()`), not cache and not a
- * versioned subdirectory. Nothing here deletes the directory on startup.
- * An upgrade of the same applicationId and signing key keeps these files.
- * Thumbnails live in `diagrams/.thumbs` and are regenerable.
+ * This directory is internal app storage. An upgrade of the same applicationId
+ * keeps it, and nothing here deletes it on startup. Uninstall wipes it.
+ * [DurableDocuments] mirrors the files to `Documents/MermaidPocket`, which
+ * stays on the device. Thumbnails live in `diagrams/.thumbs` and are regenerable.
  */
 class DiagramStore(private val filesDir: File) {
     private val dir: File = File(filesDir, "diagrams").apply { mkdirs() }
@@ -49,7 +49,7 @@ class DiagramStore(private val filesDir: File) {
     fun thumbnailFile(diagram: File): File = File(thumbsDir, "${diagram.name}.png")
 
     fun writeThumbnail(diagram: File, png: ByteArray) {
-        if (!owned(diagram) || png.isEmpty()) return
+        if (!owns(diagram) || png.isEmpty()) return
         thumbsDir.mkdirs()
         thumbnailFile(diagram).writeBytes(png)
     }
@@ -60,7 +60,7 @@ class DiagramStore(private val filesDir: File) {
     }
 
     fun delete(file: File) {
-        if (!owned(file)) return
+        if (!owns(file)) return
         file.delete()
         thumbnailFile(file).delete()
     }
@@ -68,7 +68,7 @@ class DiagramStore(private val filesDir: File) {
     fun deleteAll(files: Collection<File>): Int {
         var removed = 0
         files.forEach { file ->
-            val existed = owned(file) && file.exists()
+            val existed = owns(file) && file.exists()
             delete(file)
             if (existed) removed++
         }
@@ -86,7 +86,22 @@ class DiagramStore(private val filesDir: File) {
         }
     }
 
-    private fun owned(file: File): Boolean {
+    /**
+     * Write a diagram that already has a file name (restore from the durable folder).
+     * Does not invent a new slug.
+     */
+    fun importFile(name: String, source: String, modifiedAt: Long): File {
+        require('/' !in name && '\\' !in name && ".." !in name) { "Not a diagram name" }
+        require(name.endsWith(".mmd", ignoreCase = true) && name != ".mmd") { "Not a diagram name" }
+        val file = File(dir, name)
+        val parent = file.parentFile?.canonicalFile
+        check(parent == dir.canonicalFile) { "Diagram path escaped the library" }
+        val written = write(file, source)
+        if (modifiedAt > 0L) written.setLastModified(modifiedAt)
+        return written
+    }
+
+    fun owns(file: File): Boolean {
         return runCatching { file.parentFile?.canonicalPath == dir.canonicalPath }.getOrDefault(false)
     }
 }
