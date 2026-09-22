@@ -1,9 +1,13 @@
 # Third-party notices
 
+MermaidPocket itself is GPL-3.0-or-later (see `LICENSE` and `NOTICE`).
+It is not Mermaid Chart and it is not the official mermaid.js product.
+The bundled diagram engine below stays under the MIT License.
+
 ## Mermaid
 
 - Project: https://github.com/mermaid-js/mermaid
-- Version bundled: 11.12.1 (`app/src/main/assets/mermaid/mermaid.min.js`)
+- Version bundled: 12.0.0 (`app/src/main/assets/mermaid/mermaid.min.js`)
 - License: MIT
 
 ```

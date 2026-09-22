@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and lower full-backup rules.
+  Include app-private files (diagrams/*.mmd) and preferences.
+  Exclude regenerable thumbnails so they do not consume the 25 MB cloud quota.
+  cache/ (clipboard PNGs) is excluded by the platform.
+-->
+<full-backup-content>
+    <include
+        domain="file"
+        path="." />
+    <exclude
+        domain="file"
+        path="diagrams/.thumbs" />
+    <include
+        domain="sharedpref"
+        path="." />
+</full-backup-content>
