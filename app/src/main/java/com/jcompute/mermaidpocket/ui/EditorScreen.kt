@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.NoteAdd
@@ -830,7 +831,18 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.app_name)) },
-        text = { Text(stringResource(R.string.about_body)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(stringResource(R.string.tagline))
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.about_line))
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.about_notices),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.about_close))

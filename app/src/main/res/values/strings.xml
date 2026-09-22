@@ -10,5 +10,6 @@
     <string name="new_diagram">New</string>
     <string name="about">About</string>
     <string name="about_close">Close</string>
-    <string name="about_body">Edit and view Mermaid diagram syntax.\n\nMermaidPocket is an independent Android app. It is not Mermaid Chart and it is not the official mermaid.js product.\n\nApp license: GPL-3.0-or-later.\nDiagram engine: mermaid.js (MIT), copyright Knut Sveidqvist and mermaid-js contributors.</string>
+    <string name="about_line">MermaidPocket by J-compute · GPL · Diagrams rendered with mermaid.js (MIT)</string>
+    <string name="about_notices">Notices\n\nMermaidPocket is GPL-3.0-or-later. It is not Mermaid Chart and it is not the official mermaid.js product.\n\nDiagrams are rendered with mermaid.js 12.0.0.\nCopyright (c) 2014–2022 Knut Sveidqvist\nLicense: MIT\nhttps://github.com/mermaid-js/mermaid\n\nThe copyright and permission notice above travel with mermaid.js. The full MIT text is in NOTICE.</string>
 </resources>

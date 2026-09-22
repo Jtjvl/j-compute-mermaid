@@ -2,11 +2,15 @@
 
 Edit and view Mermaid diagram syntax.
 
+MermaidPocket by J-compute · GPL · Diagrams rendered with mermaid.js (MIT).
+
 MermaidPocket is an independent Android app. It is not [Mermaid Chart](https://www.mermaidchart.com/) and it is not the official [mermaid.js](https://github.com/mermaid-js/mermaid) product. The app is **GPL-3.0-or-later**. The bundled diagram engine remains **MIT** (Knut Sveidqvist / mermaid-js). See `LICENSE`, `NOTICE`, and `THIRD_PARTY.md`.
 
 Package: `com.jcompute.mermaidpocket`
 
 Launcher name: **MermaidPocket**
+
+The launcher mark is a pocket outline. It is not a mermaid.live or Mermaid Chart diagram logo. Circuit-J is not used on the launcher.
 
 ## Locked loop
 
@@ -51,9 +55,9 @@ No accounts, sync, or network. The manifest does not request `INTERNET`.
 
 Saved diagrams are plain UTF-8 `.mmd` files in internal storage: `filesDir/diagrams/`. That directory is not versioned and is not cleared on startup. Installing a newer APK over **the same** `com.jcompute.mermaidpocket` package and signing key keeps those files.
 
-This package id is new. Android will not move data from an older `com.jcompute.mermaid` install. That fresh-install path is intentional.
+`com.jcompute.mermaidpocket` is a clean install. MermaidPocket does not migrate diagrams from `com.jcompute.mermaid`.
 
-Pre-v1 builds of this codebase stored `filesDir/diagrams.json`. If that file is present, the first launch copies each entry into `diagrams/*.mmd` and renames the JSON to `diagrams.json.migrated`. Existing `.mmd` files are left as they are. The `.mmd` text format is unchanged.
+If this package’s own `filesDir` already contains a pre-v1 `diagrams.json`, the first launch copies those entries into `diagrams/*.mmd` and renames the JSON to `diagrams.json.migrated`. That file is not read from the old package. A new install has nothing to copy. Existing `.mmd` files are left as they are. The `.mmd` text format is unchanged.
 
 Auto Backup is explicit:
 
