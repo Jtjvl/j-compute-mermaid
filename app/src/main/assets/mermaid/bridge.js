@@ -10,8 +10,15 @@
   const MIN_ZOOM = 0.5; // keep in sync with DiagramDisplay.MIN_ZOOM
   const MAX_ZOOM = 5; // keep in sync with DiagramDisplay.MAX_ZOOM
 
+  // mermaid.live pretty ER (Mermaid 12): rainbow entity strokes live only on
+  // redux-color / redux-dark-color. `dark` / `default` / `neutral` are mono.
+  const COLOR_THEMES = { "redux-color": true, "redux-dark-color": true };
+
   let lastTheme = null;
   let renderSeq = 0;
+  let lastOkSource = null;
+  let lastOkTheme = null;
+  let lastOkSvg = null;
   let viewScale = 1;
   let viewX = 0;
   let viewY = 0;
@@ -48,33 +55,25 @@
     }
     if (lastTheme === theme) return;
     lastTheme = theme;
-    const dark = theme === "dark";
+    const dark = String(theme || "").indexOf("dark") !== -1;
     document.body.classList.toggle("dark", dark);
+    // Do not pass themeVariables (fontSize / darkMode): that merge washes
+    // borderColorArray so ER entities collapse to a single accent.
+    // Do not shrink er.entityPadding — mermaid.live uses 15 + neo look.
     mermaid.initialize({
       startOnLoad: false,
       theme: theme,
+      look: "neo",
+      layout: "elk",
       securityLevel: "strict",
-      // SVG text for ER (and most diagrams) stays sharp when the view box is resized.
       htmlLabels: false,
-      fontFamily: "ui-sans-serif, system-ui, sans-serif",
-      themeVariables: {
-        fontSize: "18px",
-        fontFamily: "ui-sans-serif, system-ui, sans-serif",
-        darkMode: dark,
-      },
       flowchart: { htmlLabels: true, curve: "basis", padding: 8, useMaxWidth: true },
       sequence: { actorMargin: 32, messageMargin: 28, useMaxWidth: true },
       class: { useMaxWidth: true },
       state: { useMaxWidth: true },
       pie: { useMaxWidth: true },
       gantt: { useMaxWidth: true },
-      er: {
-        useMaxWidth: true,
-        fontSize: 18,
-        entityPadding: 6,
-        diagramPadding: 8,
-        layoutDirection: "TB",
-      },
+      er: { useMaxWidth: true },
     });
   }
 
@@ -118,14 +117,16 @@
     if (!svg || !viewportEl) return;
     const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, viewScale || 1));
     const size = measureSvg(svg);
-    if (stageEl.clientWidth < 2) {
+    if (stageEl.clientWidth < 2 || stageEl.clientHeight < 2) {
       window.requestAnimationFrame(applyViewTransform);
       return;
     }
     const cs = window.getComputedStyle(stageEl);
     const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
     const stageW = Math.max(1, stageEl.clientWidth - padX);
-    const fit = stageW / size.width;
+    const stageH = Math.max(1, stageEl.clientHeight - padY);
+    const fit = Math.min(stageW / size.width, stageH / size.height);
     const displayW = size.width * fit * scale;
     const displayH = size.height * fit * scale;
     svg.style.maxWidth = "none";
@@ -175,12 +176,30 @@
     return new XMLSerializer().serializeToString(clone);
   }
 
-  function svgToPngDataUrl(svg, scale, background) {
+  // Keep in sync with ExportSize (Kotlin): width 256–8192, height follows aspect.
+  const EXPORT_MIN = 256;
+  const EXPORT_MAX = 8192;
+
+  function fitExportSize(targetWidth, sourceWidth, sourceHeight) {
+    let w = Math.round(Number(targetWidth) || 1920);
+    if (w < EXPORT_MIN) w = EXPORT_MIN;
+    if (w > EXPORT_MAX) w = EXPORT_MAX;
+    const sw = Number(sourceWidth) || 0;
+    const sh = Number(sourceHeight) || 0;
+    let h = sw > 0 && sh > 0 ? Math.round(w * (sh / sw)) : w;
+    if (h < 1) h = 1;
+    if (h > EXPORT_MAX) {
+      const scale = EXPORT_MAX / h;
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+      if (w > EXPORT_MAX) w = EXPORT_MAX;
+      if (h > EXPORT_MAX) h = EXPORT_MAX;
+    }
+    return { width: w, height: h };
+  }
+
+  function rasterizeSvg(svg, w, h, background, mime) {
     return new Promise(function (resolve, reject) {
-      const size = measureSvg(svg);
-      const bake = Math.max(2, Number(scale) || 2);
-      const w = Math.max(1, Math.round(size.width * bake));
-      const h = Math.max(1, Math.round(size.height * bake));
       const clone = svg.cloneNode(true);
       clone.style.maxWidth = "none";
       clone.style.width = w + "px";
@@ -213,7 +232,8 @@
             ctx.fillRect(0, 0, w, h);
           }
           ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL("image/png"));
+          const type = mime === "image/jpeg" ? "image/jpeg" : "image/png";
+          resolve(type === "image/jpeg" ? canvas.toDataURL(type, 0.92) : canvas.toDataURL("image/png"));
         } catch (err) {
           reject(err);
         }
@@ -225,10 +245,39 @@
     });
   }
 
+  function svgToPngDataUrl(svg, scale, background) {
+    const size = measureSvg(svg);
+    const bake = Math.max(2, Number(scale) || 2);
+    const w = Math.max(1, Math.round(size.width * bake));
+    const h = Math.max(1, Math.round(size.height * bake));
+    return rasterizeSvg(svg, w, h, background, "image/png");
+  }
+
+  function presentSuccess(svgMarkup, seq) {
+    if (seq !== renderSeq) return;
+    viewportEl.innerHTML = svgMarkup || "";
+    const svg = currentSvg();
+    if (!svg) {
+      show("error");
+      errorEl.textContent = "Renderer returned no SVG.";
+      notify(false, errorEl.textContent, 0, 0);
+      return;
+    }
+    if (!svg.getAttribute("preserveAspectRatio")) {
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    }
+    show("stage");
+    resetViewTransform();
+    window.requestAnimationFrame(applyViewTransform);
+    const size = measureSvg(svg);
+    notify(true, "", Math.round(size.width), Math.round(size.height));
+  }
+
   window.renderDiagram = function (source, theme) {
     const seq = ++renderSeq;
+    const resolved = COLOR_THEMES[theme] ? theme : "redux-color";
     try {
-      configure(theme || "default");
+      configure(resolved);
     } catch (err) {
       show("error");
       errorEl.textContent = String(err && err.message ? err.message : err);
@@ -238,42 +287,51 @@
 
     const text = (source || "").trim();
     if (!text) {
+      lastOkSource = null;
+      lastOkTheme = null;
+      lastOkSvg = null;
       viewportEl.innerHTML = "";
       show("empty");
       notify(true, "", 0, 0);
       return;
     }
 
-    mermaid
-      .render("mmd-" + Date.now() + "-" + seq, text)
-      .then(function (result) {
-        if (seq !== renderSeq) return;
-        viewportEl.innerHTML = result.svg || "";
-        const svg = currentSvg();
-        if (!svg) {
+    // Re-open / re-paste of identical source must still notify. mermaid.render
+    // can no-op or hang on a second pass of the same graph; replay the last SVG.
+    if (text === lastOkSource && resolved === lastOkTheme && lastOkSvg) {
+      presentSuccess(lastOkSvg, seq);
+      return;
+    }
+
+    try {
+      mermaid
+        .render("mmd-" + Date.now() + "-" + seq, text)
+        .then(function (result) {
+          if (seq !== renderSeq) return;
+          lastOkSource = text;
+          lastOkTheme = resolved;
+          lastOkSvg = result.svg || "";
+          presentSuccess(lastOkSvg, seq);
+        })
+        .catch(function (err) {
+          if (seq !== renderSeq) return;
+          lastOkSource = null;
+          lastOkTheme = null;
+          lastOkSvg = null;
+          viewportEl.innerHTML = "";
+          const message =
+            (err && (err.str || err.message)) || String(err) || "Could not render diagram.";
+          errorEl.textContent = message;
           show("error");
-          errorEl.textContent = "Renderer returned no SVG.";
-          notify(false, errorEl.textContent, 0, 0);
-          return;
-        }
-        if (!svg.getAttribute("preserveAspectRatio")) {
-          svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-        }
-        show("stage");
-        resetViewTransform();
-        window.requestAnimationFrame(applyViewTransform);
-        const size = measureSvg(svg);
-        notify(true, "", Math.round(size.width), Math.round(size.height));
-      })
-      .catch(function (err) {
-        if (seq !== renderSeq) return;
-        viewportEl.innerHTML = "";
-        const message =
-          (err && (err.str || err.message)) || String(err) || "Could not render diagram.";
-        errorEl.textContent = message;
-        show("error");
-        notify(false, message, 0, 0);
-      });
+          notify(false, message, 0, 0);
+        });
+    } catch (err) {
+      if (seq !== renderSeq) return;
+      const message = String(err && err.message ? err.message : err);
+      errorEl.textContent = message;
+      show("error");
+      notify(false, message, 0, 0);
+    }
   };
 
   window.exportSvg = function () {
@@ -295,9 +353,54 @@
       });
   };
 
-  window.addEventListener("resize", function () {
+  window.exportRaster = function (targetWidth, mime, background) {
+    const svg = currentSvg();
+    if (!svg) {
+      notifyExport("error", "Nothing to export. Render a diagram first.");
+      return;
+    }
+    const size = measureSvg(svg);
+    const fitted = fitExportSize(targetWidth, size.width, size.height);
+    const type = mime === "image/jpeg" ? "image/jpeg" : "image/png";
+    rasterizeSvg(svg, fitted.width, fitted.height, background || "#ffffff", type)
+      .then(function (dataUrl) {
+        notifyExport(type === "image/jpeg" ? "jpeg" : "png", dataUrl);
+      })
+      .catch(function (err) {
+        notifyExport("error", String(err && err.message ? err.message : err));
+      });
+  };
+
+  window.relayoutView = function () {
+    const w = Math.max(
+      window.innerWidth || 0,
+      (window.visualViewport && window.visualViewport.width) || 0,
+      document.documentElement.clientWidth || 0,
+    );
+    const h = Math.max(
+      window.innerHeight || 0,
+      (window.visualViewport && window.visualViewport.height) || 0,
+      document.documentElement.clientHeight || 0,
+    );
+    if (w > 1) {
+      document.documentElement.style.width = w + "px";
+      document.body.style.width = w + "px";
+    }
+    if (h > 1) {
+      document.documentElement.style.height = h + "px";
+      document.body.style.height = h + "px";
+    }
     if (currentSvg()) applyViewTransform();
+  };
+
+  window.addEventListener("resize", function () {
+    window.relayoutView();
   });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", function () {
+      window.relayoutView();
+    });
+  }
 
   let pinchStartDist = 0;
   let pinchStartScale = 1;

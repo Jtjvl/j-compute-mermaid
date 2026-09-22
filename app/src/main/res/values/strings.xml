@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Mermaid</string>
+    <string name="app_name">MermaidPocket</string>
+    <string name="tagline">Edit and view Mermaid diagram syntax.</string>
     <string name="edit">Edit</string>
     <string name="view">View</string>
     <string name="files">Files</string>
     <string name="copy_image">Copy image</string>
+    <string name="copy_all">Copy all</string>
     <string name="new_diagram">New</string>
+    <string name="about">About</string>
+    <string name="about_close">Close</string>
+    <string name="about_line">MermaidPocket by J-compute · GPL · Diagrams rendered with mermaid.js (MIT)</string>
+    <string name="about_notices">Notices\n\nMermaidPocket is GPL-3.0-or-later. It is not Mermaid Chart and it is not the official mermaid.js product.\n\nDiagrams are rendered with mermaid.js 12.0.0.\nCopyright (c) 2014–2022 Knut Sveidqvist\nLicense: MIT\nhttps://github.com/mermaid-js/mermaid\n\nThe copyright and permission notice above travel with mermaid.js. The full MIT text is in NOTICE.</string>
 </resources>

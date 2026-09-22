@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Mermaid"
+rootProject.name = "MermaidPocket"
 include(":app")
