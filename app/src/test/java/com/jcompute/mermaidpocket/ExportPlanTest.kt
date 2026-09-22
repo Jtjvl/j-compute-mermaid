@@ -3,7 +3,9 @@ package com.jcompute.mermaidpocket
 import com.jcompute.mermaidpocket.export.ExportFormat
 import com.jcompute.mermaidpocket.export.ExportNames
 import com.jcompute.mermaidpocket.export.ExportSize
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,6 +43,36 @@ class ExportPlanTest {
         assertEquals("About 810 KB", ExportSize.approxLabel(png))
         assertNull(ExportSize.estimateBytes(pngW, pngH, ExportFormat.Svg))
         assertNull(ExportSize.estimateBytes(pngW, pngH, ExportFormat.Mmd))
+    }
+
+    @Test
+    fun menuOffersPngSvgJpegAndMmdBesideClipboardCopy() {
+        assertEquals(
+            listOf(ExportFormat.Png, ExportFormat.Jpeg, ExportFormat.Svg, ExportFormat.Mmd),
+            ExportFormat.entries,
+        )
+        val menu = sourceFile("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorScreen.kt")
+        for (label in listOf(
+            "Share PNG",
+            "Save PNG…",
+            "Share SVG",
+            "Save SVG…",
+            "Share JPEG",
+            "Save JPEG…",
+            "Share .mmd",
+            "Save .mmd as…",
+            "Copy image",
+        )) {
+            assertTrue(menu.contains(label))
+        }
+        assertTrue(menu.contains("onCopyImage"))
+        assertFalse(menu.contains("WebP"))
+        assertFalse(menu.contains("image/webp"))
+    }
+
+    private fun sourceFile(relative: String): String {
+        val candidates = listOf(File(relative), File("../$relative"))
+        return candidates.first { it.exists() }.readText()
     }
 
     @Test
