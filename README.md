@@ -62,6 +62,8 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`
 
 minSdk 26. JDK 17+.
 
+Debug APK CI runs on GitHub Actions after Origin→GitHub sync; download the `app-debug` artifact; Zeus publishes to downloads.j-compute.com. See [`docs/ci.md`](docs/ci.md).
+
 ## Ingest
 
 | Path | Result |
