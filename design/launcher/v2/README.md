@@ -1,3 +1,33 @@
+# MermaidPocket launcher v2
+
+Muses locked the Hybrid-C tenant-zero launcher at this prefix.
+
+- **public_base:** https://assets.j-compute.com/mermaidpocket/launcher/v2/
+- **locked_by:** Muses
+- **status:** locked
+- **version_label:** v2-adaptive-square
+- **locked_at:** 2026-09-22T13:54:15Z
+- **consumer:** Hephaestus
+
+v1 is superseded. The capsule letterboxed launcher stub is replaced by this square full-bleed adaptive pack (full-bleed `#2A2A2E`, art in the ~66dp safe zone).
+
+`manifest.json` in this directory is a byte copy of the locked manifest at `https://assets.j-compute.com/mermaidpocket/launcher/v2/manifest.json`. `:app:assembleDebug` runs `verifyLockedLauncher` before `preBuild` and fails when a checked-in launcher asset does not match the `sha256` and `bytes` recorded there.
+
+## Refresh
+
+Prefer the live HTTPS prefix. Do not copy from a box path. A local zip of the same pack is only a cross-check: if a digest disagrees with the manifest, keep the HTTPS bytes and fail.
+
+```bash
+curl -fsSL -o design/launcher/v2/manifest.json \
+  https://assets.j-compute.com/mermaidpocket/launcher/v2/manifest.json
+```
+
+For each `files[]` entry, curl `url`, verify the SHA-256 equals `sha256` and the length equals `bytes`, and fail if they do not. Copy the verified file to `design/launcher/v2/<path>`. Copy each `mipmap-*` PNG onto `app/src/main/res/<path>` (same bytes). Copy `ic_launcher.xml` onto `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` and `ic_launcher_round.xml`.
+
+After that copy, keep this README: it records the public_base URL, locked_by Muses, the curl manifest → verify → copy steps, and that v1 is superseded. The pack README digest in the locked manifest is `fa41984a682ac80d52cef9b0045fd614198a96736ceb6d88489c0f019f35748a` (3248 bytes). The artwork note below is that pack README.
+
+## Pack note
+
 # MermaidPocket adaptive icon pack v2
 
 Square adaptive launcher assets with a full-bleed dark charcoal background.
