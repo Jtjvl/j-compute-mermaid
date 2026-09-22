@@ -86,9 +86,19 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 
 ### F-Droid
 
-Short description: Edit and view Mermaid diagram syntax.
+Product name: **MermaidPocket**
 
-A metadata merge request can follow once this repository is public. This tree does not ship `metadata/*.yml`.
+Short description:
+
+Private, offline Mermaid diagram editor for your phone. No ads, no accounts, no network.
+
+Longer description:
+
+Edit and view Mermaid diagram syntax on-device. Paste from chat, pinch-zoom the diagram, save .mmd locally. Fully offline. No ads, no tracking.
+
+The same text is in `fastlane/metadata/android/en-US/` (`title.txt`, `short_description.txt`, `full_description.txt`). A metadata merge request can follow once this repository is public. This tree does not ship `metadata/*.yml`.
+
+F-Droid’s summary field allows 80 characters. The short description above is 88, so that merge request has to shorten the summary before submission.
 
 minSdk 26.
 
