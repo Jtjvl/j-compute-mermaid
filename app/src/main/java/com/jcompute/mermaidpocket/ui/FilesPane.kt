@@ -162,7 +162,7 @@ fun FilesPane(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "Nothing saved yet. Paste from chat, then Save .mmd.",
+                    text = "Nothing saved yet. Paste from chat, then Save.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

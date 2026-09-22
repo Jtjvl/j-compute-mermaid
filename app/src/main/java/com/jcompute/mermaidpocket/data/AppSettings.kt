@@ -91,9 +91,17 @@ class AppSettings(context: Context) {
         prefs.edit().putInt(KEY_EXPORT_WIDTH, ExportSize.clampWidth(px)).apply()
     }
 
+    /** Tree URI from [android.content.Intent.ACTION_OPEN_DOCUMENT_TREE]. Empty when unset. */
+    fun diagramTreeUri(): String? = prefs.getString(KEY_DIAGRAM_TREE, null)?.takeIf { it.isNotBlank() }
+
+    fun setDiagramTreeUri(value: String) {
+        prefs.edit().putString(KEY_DIAGRAM_TREE, value).apply()
+    }
+
     private companion object {
         const val KEY_APPEARANCE = "appearance"
         const val KEY_DIAGRAM_THEME = "diagram_theme"
         const val KEY_EXPORT_WIDTH = "export_width"
+        const val KEY_DIAGRAM_TREE = "diagram_tree_uri"
     }
 }

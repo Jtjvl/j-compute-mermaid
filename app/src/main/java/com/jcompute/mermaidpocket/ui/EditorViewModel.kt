@@ -13,7 +13,8 @@ import com.jcompute.mermaidpocket.MermaidApp
 import com.jcompute.mermaidpocket.data.Appearance
 import com.jcompute.mermaidpocket.data.AppSettings
 import com.jcompute.mermaidpocket.data.DiagramTheme
-import com.jcompute.mermaidpocket.data.DiagramStore
+import com.jcompute.mermaidpocket.data.DiagramSync
+import com.jcompute.mermaidpocket.data.DurableDocuments
 import com.jcompute.mermaidpocket.data.MermaidIngest
 import com.jcompute.mermaidpocket.data.StoredDiagram
 import com.jcompute.mermaidpocket.data.TitleParser
@@ -60,6 +61,8 @@ data class EditorUiState(
     val canRedo: Boolean = false,
     val diagramWidth: Int = 0,
     val diagramHeight: Int = 0,
+    val libraryDurable: Boolean = false,
+    val askForDiagramFolder: Boolean = false,
 ) {
     val isDirty: Boolean get() = source != savedSource
     val fileName: String get() = currentFile?.name ?: "Untitled.mmd"
@@ -72,7 +75,8 @@ sealed interface UiEvent {
 
 class EditorViewModel(
     application: Application,
-    private val store: DiagramStore,
+    private val sync: DiagramSync,
+    private val durable: DurableDocuments,
     private val settings: AppSettings,
     private val exportWriter: ExportWriter = ExportWriter(application),
 ) : AndroidViewModel(application) {
@@ -83,6 +87,8 @@ class EditorViewModel(
         EditorUiState(
             appearance = settings.appearance(),
             diagramTheme = settings.diagramTheme(),
+            libraryDurable = sync.isDurable,
+            askForDiagramFolder = !sync.isDurable,
         ),
     )
     val state: StateFlow<EditorUiState> = _state.asStateFlow()
@@ -153,7 +159,7 @@ class EditorViewModel(
 
     fun showFiles() {
         _state.update { state ->
-            val files = store.list()
+            val files = sync.list()
             val existing = files.map { it.file.canonicalPath }.toSet()
             state.copy(
                 screen = Screen.Files,
@@ -222,7 +228,7 @@ class EditorViewModel(
             _state.update { it.copy(previewPng = bytes) }
             val file = _state.value.currentFile
             if (file != null && bytes != null) {
-                withContext(Dispatchers.IO) { store.writeThumbnail(file, bytes) }
+                withContext(Dispatchers.IO) { sync.writeThumbnail(file, bytes) }
                 refreshFiles()
             }
         }
@@ -301,7 +307,7 @@ class EditorViewModel(
 
     fun openStored(file: File) {
         viewModelScope.launch {
-            val source = withContext(Dispatchers.IO) { store.read(file) }
+            val source = withContext(Dispatchers.IO) { sync.read(file) }
             history.reset(source)
             _state.update {
                 val pass = RenderPass.next(it.renderEpoch, source)
@@ -343,7 +349,7 @@ class EditorViewModel(
 
     fun deleteStored(file: File) {
         val removedCurrent = _state.value.currentFile?.canonicalPath == file.canonicalPath
-        store.delete(file)
+        sync.delete(file)
         afterDeletes(removedCurrent, deletedCount = 1)
     }
 
@@ -357,28 +363,67 @@ class EditorViewModel(
             return
         }
         val removedCurrent = toDelete.any { it.canonicalPath == snapshot.currentFile?.canonicalPath }
-        val count = store.deleteAll(toDelete)
+        val count = sync.deleteAll(toDelete)
         afterDeletes(removedCurrent, deletedCount = count)
     }
 
     fun save() {
         viewModelScope.launch {
             val snapshot = _state.value
-            val file = withContext(Dispatchers.IO) {
-                val target = snapshot.currentFile ?: store.uniqueFile(TitleParser.fileSlug(snapshot.title))
-                store.write(target, snapshot.source)
-                snapshot.previewPng?.let { store.writeThumbnail(target, it) }
-                target
+            val result = withContext(Dispatchers.IO) {
+                val target = snapshot.currentFile ?: sync.uniqueFile(TitleParser.fileSlug(snapshot.title))
+                val written = sync.write(target, snapshot.source)
+                snapshot.previewPng?.let { sync.writeThumbnail(written.file, it) }
+                written
             }
             _state.update {
                 it.copy(
-                    currentFile = file,
+                    currentFile = result.file,
                     savedSource = snapshot.source,
-                    title = displayTitle(snapshot.source, file.name),
+                    title = displayTitle(snapshot.source, result.file.name),
+                    libraryDurable = sync.isDurable,
+                    askForDiagramFolder = !result.mirrored && !sync.isDurable,
                 )
             }
             refreshFiles()
-            notify("Saved ${file.name}")
+            val name = result.file.name
+            notify(
+                when {
+                    result.mirrored -> "Saved $name"
+                    sync.isDurable -> "Saved $name, but the diagram folder was not updated."
+                    else -> "Saved $name"
+                },
+            )
+        }
+    }
+
+    fun dismissFolderPrompt() {
+        _state.update { it.copy(askForDiagramFolder = false) }
+    }
+
+    fun suggestedDiagramFolder(): Uri = durable.suggestedInitialUri()
+
+    fun grantDiagramFolder(uri: Uri) {
+        viewModelScope.launch {
+            val report = runCatching {
+                withContext(Dispatchers.IO) {
+                    durable.attach(uri)
+                    sync.reconcile()
+                }
+            }
+            report.onSuccess { summary ->
+                _state.update { it.copy(libraryDurable = true, askForDiagramFolder = false) }
+                refreshFiles()
+                val copied = summary.copied
+                val extra = if (copied > 0) {
+                    " Copied $copied existing diagram${if (copied == 1) "" else "s"}."
+                } else {
+                    ""
+                }
+                notify("Diagrams stay in ${DurableDocuments.DISPLAY_PATH}.$extra")
+            }.onFailure { error ->
+                notify(error.message ?: "Could not use that folder.")
+            }
         }
     }
 
@@ -460,7 +505,7 @@ class EditorViewModel(
     fun shareStored(file: File) {
         viewModelScope.launch {
             runCatching {
-                val text = withContext(Dispatchers.IO) { store.read(file) }
+                val text = withContext(Dispatchers.IO) { sync.read(file) }
                 if (text.isEmpty()) error("That file is empty.")
                 val name = ExportNames.fileName(file.name, ExportFormat.Mmd)
                 val uri = withContext(Dispatchers.IO) {
@@ -500,7 +545,7 @@ class EditorViewModel(
             }
             cleared.copy(
                 screen = Screen.Files,
-                files = store.list(),
+                files = sync.list(),
                 selection = FileSelection(),
                 immersiveView = false,
                 canUndo = history.canUndo,
@@ -513,7 +558,7 @@ class EditorViewModel(
 
     private fun refreshFiles() {
         _state.update { state ->
-            val files = store.list()
+            val files = sync.list()
             val existing = files.map { it.file.canonicalPath }.toSet()
             state.copy(files = files, selection = state.selection.prune(existing))
         }
@@ -566,7 +611,7 @@ class EditorViewModel(
     class Factory(private val app: MermaidApp) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             @Suppress("UNCHECKED_CAST")
-            return EditorViewModel(app, app.store, app.settings) as T
+            return EditorViewModel(app, app.sync, app.durable, app.settings) as T
         }
     }
 }

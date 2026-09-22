@@ -10,14 +10,14 @@ Package: `com.jcompute.mermaidpocket`
 
 Launcher name: **MermaidPocket**
 
-The launcher mark is the signed-off diamond-fork (dark `#1a1a1a` field, four colored nodes). It is not a mermaid.live or Mermaid Chart diagram logo. Circuit-J is not used on the launcher.
+The launcher mark is the signed-off diamond-fork on a square full-bleed `#2A2A2E` field (adaptive icon v2). It is not a mermaid.live or Mermaid Chart diagram logo. Circuit-J is not used on the launcher.
 
 ## Locked loop
 
 1. Copy a diagram from chat (plain Mermaid or a ` ```mermaid ` fence) **or** share that text into MermaidPocket.
 2. The app strips markdown fences and opens **View**.
 3. **Copy image** puts a PNG on the clipboard (device pixel ratio). Paste it into another app.
-4. **Save .mmd** keeps the source in app-private storage. **Files** lists those diagrams.
+4. **Save** keeps the source as `.mmd` in **Documents/MermaidPocket**. **Files** lists those diagrams.
 
 Paste and share-to-app are equal ingest paths.
 
@@ -28,16 +28,14 @@ Paste and share-to-app are equal ingest paths.
 
 ## Export
 
-Overflow menu, offline only:
+Overflow menu, offline only: exactly **Save** and **Share**. Pressing either one opens the formats (PNG, SVG, JPEG, .mmd). It is not a flat list of one row per format.
 
-| Action | PNG | JPEG | SVG | .mmd |
-| --- | --- | --- | --- | --- |
-| **Share** | share sheet | share sheet | share sheet | share sheet |
-| **Save** | you pick a folder (Downloads, Pictures, …) | same | same | same |
+| Action | What you get |
+| --- | --- |
+| **Save** | PNG, JPEG, and SVG open the system picker. **.mmd** writes the library copy. **Save a copy…** places a `.mmd` wherever you choose. |
+| **Share** | The same formats, then the Android share sheet. |
 
-PNG and JPEG ask for a **width** (slider, or an exact pixel value). Height follows the diagram. Default **1920**, remembered after each export, limited to **256–8192**. The dialog shows an approximate file size from the pixel count. SVG has no size control. **Copy image** still uses the screen density bake and does not open this dialog.
-
-In-app **Save .mmd** still writes the library copy under app-private storage. **Save .mmd as…** is the copy you place yourself. Files rows can **Share .mmd**.
+PNG and JPEG ask for a **width** (slider, or an exact pixel value) on that same screen. Height follows the diagram. Default **1920**, remembered after each export, limited to **256–8192**. The dialog shows an approximate file size from the pixel count. SVG and `.mmd` have no size control. **Copy image** still uses the screen density bake and does not open this dialog. **Copy all** stays in the Edit toolbar.
 
 ## What is included
 
@@ -46,27 +44,29 @@ In-app **Save .mmd** still writes the library copy under app-private storage. **
 - **Diagram theme** picker (mermaid.live Default = `redux-color`, Dark = `redux-dark-color`), remembered; app chrome light/dark is separate
 - View: pinch-zoom, double-tap to fit; tap **View** again for full-screen (Back or View exits); rotation relayouts the SVG
 - **Copy image** to the clipboard
-- Share / Save **PNG**, **JPEG**, **SVG**, and **.mmd**
+- **Save** and **Share**, then PNG, SVG, JPEG, or `.mmd`
 - **Files** with thumbnails; long-press to multi-select and bulk-delete; swipe deletes one file
 
 No accounts, sync, or network. The manifest does not request `INTERNET`.
 
-## Diagrams survive upgrades
+## Diagrams survive uninstall
 
-Saved diagrams are plain UTF-8 `.mmd` files in internal storage: `filesDir/diagrams/`. That directory is not versioned and is not cleared on startup. Installing a newer APK over **the same** `com.jcompute.mermaidpocket` package and signing key keeps those files.
+Saved diagrams are plain UTF-8 `.mmd` files in **Documents/MermaidPocket**.
+
+That folder is on shared storage, granted with the system folder picker (`ACTION_OPEN_DOCUMENT_TREE`, persistable URI permission). Android deletes app-private storage on uninstall; it does not delete this folder. After you reinstall MermaidPocket, choose the same folder and the files are listed again. If you only grant `Documents`, the app uses the `MermaidPocket` directory inside it.
+
+The app also keeps a working copy in `filesDir/diagrams/` so the editor can open files directly. The first time you grant the folder, existing `.mmd` files in that working copy (including a pre-v1 `diagrams.json` after it is converted) are copied into `Documents/MermaidPocket`. Files already in the folder are copied back into the working copy. Same text is not duplicated. The newer file wins when both sides differ.
 
 `com.jcompute.mermaidpocket` is a clean install. MermaidPocket does not migrate diagrams from `com.jcompute.mermaid`.
 
-If this package’s own `filesDir` already contains a pre-v1 `diagrams.json`, the first launch copies those entries into `diagrams/*.mmd` and renames the JSON to `diagrams.json.migrated`. That file is not read from the old package. A new install has nothing to copy. Existing `.mmd` files are left as they are. The `.mmd` text format is unchanged.
+If this package’s own `filesDir` already contains a pre-v1 `diagrams.json`, the first launch copies those entries into `diagrams/*.mmd` and renames the JSON to `diagrams.json.migrated`. That file is not read from the old package. Existing `.mmd` files are left as they are. The `.mmd` text format is unchanged.
 
-Auto Backup is explicit:
+Auto Backup still covers the working copy and preferences:
 
 - Android 11 and lower: `res/xml/backup_rules.xml`
 - Android 12+: `res/xml/data_extraction_rules.xml` (cloud backup and device-to-device)
 
-Both include `filesDir` and shared preferences (appearance, diagram theme, last export width) and exclude `diagrams/.thumbs`, so preview PNGs do not consume the 25 MB cloud quota. Clipboard and share-sheet files live in `cacheDir` and are not backed up.
-
-**Uninstall.** Android deletes app-private files. On Android 10 and later the system may ask whether to keep app data (`hasFragileUserData`). If a Google backup exists, reinstall can restore `.mmd` files; backup runs when the device is idle, on Wi-Fi, and backup is enabled. If you clear storage, decline to keep data, or no backup exists, the library is gone. **Save .mmd as…** is the copy that lives outside the app.
+Both include `filesDir` and shared preferences (appearance, diagram theme, last export width, folder grant) and exclude `diagrams/.thumbs`, so preview PNGs do not consume the 25 MB cloud quota. Clipboard and share-sheet files live in `cacheDir` and are not backed up. The grant itself does not survive uninstall; the `.mmd` files in `Documents/MermaidPocket` do.
 
 ## Build
 
@@ -111,7 +111,7 @@ minSdk 26.
 
 ## Files
 
-- **Save .mmd** writes `filesDir/diagrams/<name>.mmd` and a preview PNG under `diagrams/.thumbs/`
+- **Save** of `.mmd` writes `Documents/MermaidPocket/<name>.mmd` (and a working copy under `filesDir/diagrams/`). Preview PNGs stay in `diagrams/.thumbs/`
 - **Files** lists those files with diagram thumbnails (placeholder until a diagram has been viewed or saved)
 - Long-press a row to multi-select and bulk-delete; swipe deletes one file; the share icon sends that `.mmd`
 - Unsaved paste/share stays in memory until you save
@@ -138,5 +138,5 @@ No emulator in this environment. On a phone:
 1. Edit: type, **Copy all**, long-press the editor (toast), **Undo** / **Redo**, swipe the history strip.
 2. Rotate View, tap View again for full-screen, paste the same diagram twice (spinner must clear). Theme Default/Dark still switches.
 3. Files: thumbnail after View, long-press bulk delete, swipe one row, share icon.
-4. Overflow: Share and Save for PNG, JPEG, SVG, and `.mmd`. PNG/JPEG show the width slider and a size estimate; SVG does not. Save opens the system picker. Copy image still copies without that dialog.
-5. Save a `.mmd`, install a newer build of `com.jcompute.mermaidpocket` over it, and confirm the file is still listed.
+4. Overflow: one **Save** and one **Share**. Each opens PNG, SVG, JPEG, and `.mmd`. PNG/JPEG show the width slider and a size estimate. Save of PNG, JPEG, and SVG opens the system picker. Share opens the Android share sheet. Copy all and Copy image still copy without that dialog.
+5. Save a `.mmd`, uninstall `com.jcompute.mermaidpocket`, reinstall it, choose `Documents/MermaidPocket` again, and confirm the file is listed.
