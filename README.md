@@ -10,7 +10,7 @@ Package: `com.jcompute.mermaidpocket`
 
 Launcher name: **MermaidPocket**
 
-The launcher mark is a pocket outline. It is not a mermaid.live or Mermaid Chart diagram logo. Circuit-J is not used on the launcher.
+The launcher mark is the signed-off diamond-fork (dark `#1a1a1a` field, four colored nodes). It is not a mermaid.live or Mermaid Chart diagram logo. Circuit-J is not used on the launcher.
 
 ## Locked loop
 
