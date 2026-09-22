@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Mermaid</string>
+    <string name="app_name">MermaidPocket</string>
+    <string name="tagline">Edit and view Mermaid diagram syntax.</string>
     <string name="edit">Edit</string>
     <string name="view">View</string>
     <string name="files">Files</string>
     <string name="copy_image">Copy image</string>
+    <string name="copy_all">Copy all</string>
     <string name="new_diagram">New</string>
+    <string name="about">About</string>
+    <string name="about_close">Close</string>
+    <string name="about_body">Edit and view Mermaid diagram syntax.\n\nMermaidPocket is an independent Android app. It is not Mermaid Chart and it is not the official mermaid.js product.\n\nApp license: GPL-3.0-or-later.\nDiagram engine: mermaid.js (MIT), copyright Knut Sveidqvist and mermaid-js contributors.</string>
 </resources>

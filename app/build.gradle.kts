@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.jcompute.mermaid"
+    namespace = "com.jcompute.mermaidpocket"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.jcompute.mermaid"
+        applicationId = "com.jcompute.mermaidpocket"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -21,6 +21,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Unsigned in this repo. F-Droid (or another store) signs the APK.
+            // Minify stays off so release bytecode matches this source.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

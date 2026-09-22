@@ -176,12 +176,30 @@
     return new XMLSerializer().serializeToString(clone);
   }
 
-  function svgToPngDataUrl(svg, scale, background) {
+  // Keep in sync with ExportSize (Kotlin): width 256–8192, height follows aspect.
+  const EXPORT_MIN = 256;
+  const EXPORT_MAX = 8192;
+
+  function fitExportSize(targetWidth, sourceWidth, sourceHeight) {
+    let w = Math.round(Number(targetWidth) || 1920);
+    if (w < EXPORT_MIN) w = EXPORT_MIN;
+    if (w > EXPORT_MAX) w = EXPORT_MAX;
+    const sw = Number(sourceWidth) || 0;
+    const sh = Number(sourceHeight) || 0;
+    let h = sw > 0 && sh > 0 ? Math.round(w * (sh / sw)) : w;
+    if (h < 1) h = 1;
+    if (h > EXPORT_MAX) {
+      const scale = EXPORT_MAX / h;
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+      if (w > EXPORT_MAX) w = EXPORT_MAX;
+      if (h > EXPORT_MAX) h = EXPORT_MAX;
+    }
+    return { width: w, height: h };
+  }
+
+  function rasterizeSvg(svg, w, h, background, mime) {
     return new Promise(function (resolve, reject) {
-      const size = measureSvg(svg);
-      const bake = Math.max(2, Number(scale) || 2);
-      const w = Math.max(1, Math.round(size.width * bake));
-      const h = Math.max(1, Math.round(size.height * bake));
       const clone = svg.cloneNode(true);
       clone.style.maxWidth = "none";
       clone.style.width = w + "px";
@@ -214,7 +232,8 @@
             ctx.fillRect(0, 0, w, h);
           }
           ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL("image/png"));
+          const type = mime === "image/jpeg" ? "image/jpeg" : "image/png";
+          resolve(type === "image/jpeg" ? canvas.toDataURL(type, 0.92) : canvas.toDataURL("image/png"));
         } catch (err) {
           reject(err);
         }
@@ -224,6 +243,14 @@
       };
       img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
     });
+  }
+
+  function svgToPngDataUrl(svg, scale, background) {
+    const size = measureSvg(svg);
+    const bake = Math.max(2, Number(scale) || 2);
+    const w = Math.max(1, Math.round(size.width * bake));
+    const h = Math.max(1, Math.round(size.height * bake));
+    return rasterizeSvg(svg, w, h, background, "image/png");
   }
 
   function presentSuccess(svgMarkup, seq) {
@@ -320,6 +347,24 @@
     svgToPngDataUrl(svg, scale || 2, background || "#ffffff")
       .then(function (dataUrl) {
         notifyExport("png", dataUrl);
+      })
+      .catch(function (err) {
+        notifyExport("error", String(err && err.message ? err.message : err));
+      });
+  };
+
+  window.exportRaster = function (targetWidth, mime, background) {
+    const svg = currentSvg();
+    if (!svg) {
+      notifyExport("error", "Nothing to export. Render a diagram first.");
+      return;
+    }
+    const size = measureSvg(svg);
+    const fitted = fitExportSize(targetWidth, size.width, size.height);
+    const type = mime === "image/jpeg" ? "image/jpeg" : "image/png";
+    rasterizeSvg(svg, fitted.width, fitted.height, background || "#ffffff", type)
+      .then(function (dataUrl) {
+        notifyExport(type === "image/jpeg" ? "jpeg" : "png", dataUrl);
       })
       .catch(function (err) {
         notifyExport("error", String(err && err.message ? err.message : err));
