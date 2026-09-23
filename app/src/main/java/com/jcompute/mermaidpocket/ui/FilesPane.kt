@@ -20,12 +20,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -69,7 +73,9 @@ fun FilesTopBar(
     selection: FileSelection,
     onCancelSelection: () -> Unit,
     onDeleteSelected: () -> Unit,
+    onNew: () -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -99,6 +105,22 @@ fun FilesTopBar(
                     enabled = selection.count > 0,
                 ) {
                     Icon(Icons.Outlined.Delete, contentDescription = "Delete selected")
+                }
+            } else {
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("New") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onNew()
+                            },
+                        )
+                    }
                 }
             }
         },
@@ -145,7 +167,6 @@ fun FilesPane(
     onCancelSelection: () -> Unit,
     onPaste: () -> Unit,
     onOpenExternal: () -> Unit,
-    onNew: () -> Unit,
     onShare: (File) -> Unit,
 ) {
     BackHandler(enabled = selection.active) {
@@ -170,7 +191,6 @@ fun FilesPane(
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = onPaste) { Text("Paste") }
                 TextButton(onClick = onOpenExternal) { Text("Open…") }
-                TextButton(onClick = onNew) { Text("New") }
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {

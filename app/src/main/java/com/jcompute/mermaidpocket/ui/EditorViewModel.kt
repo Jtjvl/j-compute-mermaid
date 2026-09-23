@@ -371,10 +371,13 @@ class EditorViewModel(
         viewModelScope.launch {
             val snapshot = _state.value
             val result = withContext(Dispatchers.IO) {
-                val target = snapshot.currentFile ?: sync.uniqueFile(TitleParser.fileSlug(snapshot.title))
-                val written = sync.write(target, snapshot.source)
-                snapshot.previewPng?.let { sync.writeThumbnail(written.file, it) }
-                written
+                LibrarySave.commit(
+                    sync = sync,
+                    currentFile = snapshot.currentFile,
+                    title = snapshot.title,
+                    source = snapshot.source,
+                    thumbnail = snapshot.previewPng,
+                )
             }
             _state.update {
                 it.copy(
