@@ -198,6 +198,17 @@ fun MermaidAppRoot(
         }
     }
 
+    fun launchOpen() {
+        openDocument.launch(
+            arrayOf(
+                "text/plain",
+                "text/markdown",
+                "text/*",
+                "*/*",
+            ),
+        )
+    }
+
     fun paste() {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         val text = clipboard.primaryClip
@@ -229,9 +240,15 @@ fun MermaidAppRoot(
                 if (state.screen == Screen.Files) {
                     FilesTopBar(
                         selection = state.selection,
+                        appearance = state.appearance,
+                        diagramTheme = state.diagramTheme,
                         onCancelSelection = viewModel::cancelSelection,
                         onDeleteSelected = { confirmBulkDelete = true },
                         onNew = viewModel::newDiagram,
+                        onOpen = ::launchOpen,
+                        onDiagramFolder = { chooseDiagramFolder.launch(viewModel.suggestedDiagramFolder()) },
+                        onAppearance = viewModel::setAppearance,
+                        onDiagramTheme = viewModel::setDiagramTheme,
                     )
                 } else {
                     DocumentTopBar(
@@ -245,16 +262,7 @@ fun MermaidAppRoot(
                         onSave = { pendingExport = ExportDelivery.Save },
                         onShare = { pendingExport = ExportDelivery.Share },
                         onDiagramFolder = { chooseDiagramFolder.launch(viewModel.suggestedDiagramFolder()) },
-                        onOpen = {
-                            openDocument.launch(
-                                arrayOf(
-                                    "text/plain",
-                                    "text/markdown",
-                                    "text/*",
-                                    "*/*",
-                                ),
-                            )
-                        },
+                        onOpen = ::launchOpen,
                         onAppearance = viewModel::setAppearance,
                         onDiagramTheme = viewModel::setDiagramTheme,
                         onNew = viewModel::newDiagram,
@@ -341,9 +349,7 @@ fun MermaidAppRoot(
                         onToggleSelected = viewModel::toggleSelected,
                         onCancelSelection = viewModel::cancelSelection,
                         onPaste = ::paste,
-                        onOpenExternal = {
-                            openDocument.launch(arrayOf("text/plain", "text/markdown", "text/*", "*/*"))
-                        },
+                        onOpenExternal = ::launchOpen,
                         onShare = viewModel::shareStored,
                     )
                 }
@@ -400,7 +406,7 @@ fun MermaidAppRoot(
             title = { Text("Keep diagrams") },
             text = {
                 Text(
-                    "Choose ${DurableDocuments.DISPLAY_PATH}. .mmd files there stay on this device after you uninstall MermaidPocket. After you reinstall, choose the same folder. If you only see Documents, choose that and the app uses MermaidPocket inside it.",
+                    "Choose ${DurableDocuments.DISPLAY_PATH}. .mmd files there stay on this device after you uninstall MermaidPocket. After you reinstall, choose the same folder. If you only see Documents, choose that and the app uses MermaidPocket inside it. A folder that already contains .mmd files is used as the library.",
                 )
             },
             confirmButton = {
@@ -444,8 +450,6 @@ private fun DocumentTopBar(
     onDiagramTheme: (DiagramTheme) -> Unit,
     onNew: () -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    var aboutOpen by remember { mutableStateOf(false) }
     val editing = state.mode == EditorMode.Edit && state.screen == Screen.Document
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -490,83 +494,117 @@ private fun DocumentTopBar(
                     }
                 }
             }
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "More")
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("New") },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onNew()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Save") },
-                        leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onSave()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Share") },
-                        leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onShare()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Open…") },
-                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onOpen()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Diagram folder…") },
-                        leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onDiagramFolder()
-                        },
-                    )
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.about)) },
-                        leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            aboutOpen = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Diagram: ${state.diagramTheme.menuLabel}") },
-                        leadingIcon = { Icon(Icons.Outlined.Palette, contentDescription = null) },
-                        onClick = {
-                            onDiagramTheme(state.diagramTheme.next())
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Chrome: ${state.appearance.name}") },
-                        leadingIcon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
-                        onClick = {
-                            val next = when (state.appearance) {
-                                Appearance.System -> Appearance.Light
-                                Appearance.Light -> Appearance.Dark
-                                Appearance.Dark -> Appearance.System
-                            }
-                            onAppearance(next)
-                        },
-                    )
-                }
-            }
+            PocketOverflowMenu(
+                appearance = state.appearance,
+                diagramTheme = state.diagramTheme,
+                showDocumentActions = true,
+                onNew = onNew,
+                onOpen = onOpen,
+                onDiagramFolder = onDiagramFolder,
+                onAppearance = onAppearance,
+                onDiagramTheme = onDiagramTheme,
+                onSave = onSave,
+                onShare = onShare,
+            )
         },
     )
+}
+
+/**
+ * Overflow shared by Files, Edit, and View. Save and Share stay on the document.
+ */
+@Composable
+internal fun PocketOverflowMenu(
+    appearance: Appearance,
+    diagramTheme: DiagramTheme,
+    showDocumentActions: Boolean,
+    onNew: () -> Unit,
+    onOpen: () -> Unit,
+    onDiagramFolder: () -> Unit,
+    onAppearance: (Appearance) -> Unit,
+    onDiagramTheme: (DiagramTheme) -> Unit,
+    onSave: () -> Unit = {},
+    onShare: () -> Unit = {},
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var aboutOpen by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { menuOpen = true }) {
+            Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("New") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onNew()
+                },
+            )
+            if (showDocumentActions) {
+                DropdownMenuItem(
+                    text = { Text("Save") },
+                    leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        onSave()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Share") },
+                    leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        onShare()
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Open…") },
+                leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onOpen()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Diagram folder…") },
+                leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onDiagramFolder()
+                },
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.about)) },
+                leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    aboutOpen = true
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Diagram: ${diagramTheme.menuLabel}") },
+                leadingIcon = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                onClick = {
+                    onDiagramTheme(diagramTheme.next())
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Chrome: ${appearance.name}") },
+                leadingIcon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
+                onClick = {
+                    val next = when (appearance) {
+                        Appearance.System -> Appearance.Light
+                        Appearance.Light -> Appearance.Dark
+                        Appearance.Dark -> Appearance.System
+                    }
+                    onAppearance(next)
+                },
+            )
+        }
+    }
     if (aboutOpen) {
         AboutDialog(onDismiss = { aboutOpen = false })
     }

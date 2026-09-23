@@ -149,6 +149,10 @@ class DiagramSync(
         return removed
     }
 
+    /**
+     * Pull and push by file name. Diagrams that share a title stay separate rows
+     * when their `.mmd` names differ.
+     */
     fun reconcile(): SyncReport {
         val remote = remoteProvider() ?: return SyncReport(0, 0)
         val localFiles = local.list()

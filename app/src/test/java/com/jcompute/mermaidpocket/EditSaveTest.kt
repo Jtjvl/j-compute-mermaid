@@ -3,6 +3,7 @@ package com.jcompute.mermaidpocket
 import com.jcompute.mermaidpocket.data.DiagramStore
 import com.jcompute.mermaidpocket.data.DiagramSync
 import com.jcompute.mermaidpocket.ui.EditSaveChrome
+import com.jcompute.mermaidpocket.ui.EditorLink
 import com.jcompute.mermaidpocket.ui.EditorMode
 import com.jcompute.mermaidpocket.ui.LibrarySave
 import com.jcompute.mermaidpocket.ui.Screen
@@ -11,6 +12,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -146,8 +148,12 @@ class EditSaveTest {
     fun blankIsMenuOnlyAndNewDiagramIsUnlinked() {
         val files = source("app/src/main/java/com/jcompute/mermaidpocket/ui/FilesPane.kt")
         val filesMenu = files.substringAfter("fun FilesTopBar").substringBefore("fun BulkDeleteDialog")
-        assertTrue(filesMenu.contains("Text(\"New\")"))
-        assertTrue(filesMenu.contains("onNew()"))
+        assertTrue(filesMenu.contains("PocketOverflowMenu"))
+        assertTrue(filesMenu.contains("onNew = onNew"))
+        assertTrue(filesMenu.contains("showDocumentActions = false"))
+        val selecting = filesMenu.substringAfter("actions = {").substringAfter("if (selection.active)").substringBefore("} else")
+        assertTrue(selecting.contains("Delete selected"))
+        assertFalse(selecting.contains("PocketOverflowMenu"))
         val pane = files.substringAfter("fun FilesPane")
         assertFalse(pane.contains("Text(\"New\")"))
         assertFalse(pane.contains("onNew"))
@@ -159,7 +165,85 @@ class EditSaveTest {
         assertTrue(blank.contains("mode = EditorMode.Edit"))
         val save = model.substringAfter("fun save()").substringBefore("fun dismissFolderPrompt")
         assertTrue(save.contains("LibrarySave.commit"))
+        assertTrue(save.contains("currentFile = snapshot.currentFile"))
         assertTrue(save.contains("currentFile = result.file"))
+    }
+
+    @Test
+    fun openStoredThenOpenImportedWithTheSameTitleSavesADifferentFile() {
+        val original = "%% Shared\nflowchart TD\n  A-->B"
+        val incoming = "%% Shared\nflowchart TD\n  C-->D"
+        val existing = sync.write(sync.uniqueFile("alpha"), original).file
+        val before = existing.readBytes()
+        val stored = EditorLink.stored(existing, sync.read(existing))
+        val imported = EditorLink.imported(incoming, "beta.mmd")
+
+        assertEquals(existing.canonicalPath, stored.currentFile!!.canonicalPath)
+        assertFalse(stored.isDirty)
+        assertEquals("Shared", stored.title)
+        assertEquals(stored.title, imported.title)
+        assertNull(imported.currentFile)
+        assertTrue(imported.isDirty)
+        assertEquals("", imported.savedSource)
+
+        val written = LibrarySave.commit(
+            sync = sync,
+            currentFile = imported.currentFile,
+            title = imported.title,
+            source = imported.source,
+        )
+        assertNotEquals(existing.canonicalPath, written.file.canonicalPath)
+        assertTrue(before.contentEquals(existing.readBytes()))
+        assertEquals(imported.source, written.file.readText())
+        assertEquals(original, existing.readText())
+        assertEquals(
+            listOf(existing.name, written.file.name).sorted(),
+            store.list().map { it.name }.sorted(),
+        )
+    }
+
+    @Test
+    fun ingestAndOpenImportedUnlinkThePreviousFile() {
+        val model = source("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorViewModel.kt")
+        val ingest = model.substringAfter("fun ingest(").substringBefore("fun pasteFromClipboard")
+        assertTrue(ingest.contains("EditorLink.imported"))
+        assertTrue(ingest.contains("currentFile = link.currentFile"))
+        assertTrue(ingest.contains("savedSource = link.savedSource"))
+        val openImported = model.substringAfter("fun openImported").substringBefore("fun enterSelection")
+        assertTrue(openImported.contains("ingest("))
+        val intent = model.substringAfter("fun handleIntent").substringBefore("fun openStored")
+        assertTrue(intent.contains("ingest("))
+        val openStored = model.substringAfter("fun openStored").substringBefore("fun openImported")
+        assertTrue(openStored.contains("EditorLink.stored"))
+        assertTrue(openStored.contains("currentFile = link.currentFile"))
+        assertFalse(openStored.contains("currentFile = null"))
+    }
+
+    @Test
+    fun filesOverflowMatchesEditAndViewAndRowsKeepFileNames() {
+        val screen = source("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorScreen.kt")
+        val overflow = screen.substringAfter("fun PocketOverflowMenu").substringBefore("private fun DocumentBottomBar")
+        assertTrue(overflow.contains("Text(\"New\")"))
+        assertTrue(overflow.contains("onNew()"))
+        assertTrue(overflow.contains("Text(\"Open…\")"))
+        assertTrue(overflow.contains("Text(\"Diagram folder…\")"))
+        assertTrue(overflow.contains("stringResource(R.string.about)"))
+        assertTrue(overflow.contains("Diagram:"))
+        assertTrue(overflow.contains("Chrome:"))
+        assertTrue(overflow.contains("showDocumentActions"))
+        assertEquals(1, Regex("""Text\("Save"\)""").findAll(overflow).count())
+        assertTrue(screen.contains("showDocumentActions = true"))
+        assertTrue(screen.contains("onOpen = ::launchOpen"))
+
+        val files = source("app/src/main/java/com/jcompute/mermaidpocket/ui/FilesPane.kt")
+        assertTrue(files.contains("key = { it.file.absolutePath }"))
+        assertFalse(files.contains("distinctBy"))
+        val row = files.substringAfter("private fun FileRow").substringBefore("private fun DiagramThumbnail")
+        val headline = row.substringAfter("headlineContent").substringBefore("supportingContent")
+        val supporting = row.substringAfter("supportingContent").substringBefore("leadingContent")
+        assertTrue(headline.contains("diagram.title"))
+        assertFalse(headline.contains("diagram.name"))
+        assertTrue(supporting.contains("diagram.name"))
     }
 
     private fun source(relative: String): String {
