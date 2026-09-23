@@ -2,6 +2,11 @@
 
 User-facing releases only. See [VERSIONING.md](VERSIONING.md).
 
+## 0.3.2
+
+- Lean CI: pull requests assemble only and upload no artifact; push to main keeps the debug APK for 2 days
+- Failure mail goes to ops-alert@j-compute.com via alerts@ SMTP
+
 ## 0.3.1
 
 - Open/import unlinks so Save creates a new file instead of overwriting a previously linked diagram
