@@ -1,8 +1,11 @@
 package com.jcompute.mermaidpocket.data
 
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.database.Cursor
 import android.net.Uri
+import android.os.Bundle
 import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
@@ -14,9 +17,13 @@ import androidx.documentfile.provider.DocumentFile
  * folder the user grants are not. The canonical place is [DISPLAY_PATH]:
  * pick `Documents` and this class uses (or creates) the `MermaidPocket` child,
  * or pick that folder directly. A picked folder that already has `.mmd` files
- * at its root — or nested outside a leftover `MermaidPocket` child — is the
- * library itself. [DocumentRemote] lists every `.mmd` under that tree, not
- * only direct children.
+ * at its root is the library itself — those files are not skipped in favor of
+ * a nested `MermaidPocket` directory.
+ *
+ * Listing is **direct children only**. Peer `.mmd` files are included by name
+ * even when MIME is null ([DocumentFile.isFile] is false then — typical for
+ * desktop-copied diagrams next to app-created `text/plain` ones). The child
+ * query paginates; [DocumentFile.listFiles] is the fallback.
  *
  * The grant itself does not survive uninstall. After reinstall, choose the
  * same folder and [DiagramSync.reconcile] copies the `.mmd` files back.
@@ -41,7 +48,8 @@ class DurableDocuments(
 
     fun remote(): RemoteDiagrams? {
         val root = libraryRoot() ?: return null
-        return DocumentRemote(appContext, root)
+        val tree = persistedTreeUri() ?: return null
+        return DocumentRemote(appContext, root, tree)
     }
 
     fun suggestedInitialUri(): Uri {
@@ -79,65 +87,42 @@ class DurableDocuments(
         val tree = persistedTreeUri() ?: return null
         val picked = DocumentFile.fromTreeUri(appContext, tree) ?: return null
         if (!picked.isDirectory) return null
-        val children = picked.listFiles()?.toList().orEmpty()
-        val choice = LibraryRoot.choose(
-            pickedName = picked.name,
-            children = children.mapNotNull { doc ->
-                val name = doc.name ?: return@mapNotNull null
-                LibraryChild(name = name, directory = doc.isDirectory)
-            },
-            nestedMmdOutsidePocket = hasMmdOutsidePocket(children),
-        )
+        val childRows = queryChildren(appContext, tree, picked)
+        val children = childRows.mapNotNull { row ->
+            val name = LibraryChildren.displayName(row.name, row.documentId) ?: return@mapNotNull null
+            LibraryChild(name = name, directory = LibraryChildren.isDirectory(row.mimeType))
+        }
+        val choice = LibraryRoot.choose(pickedName = picked.name, children = children)
         return when (choice) {
             LibraryRootChoice.Picked -> picked
-            LibraryRootChoice.ExistingChild -> children.firstOrNull { doc ->
-                doc.isDirectory && doc.name.equals(FOLDER_NAME, ignoreCase = true)
+            LibraryRootChoice.ExistingChild -> childRows.firstNotNullOfOrNull { row ->
+                val name = LibraryChildren.displayName(row.name, row.documentId)
+                if (LibraryChildren.isDirectory(row.mimeType) &&
+                    name.equals(FOLDER_NAME, ignoreCase = true)
+                ) {
+                    documentFile(appContext, tree, row)
+                } else {
+                    null
+                }
             }
             LibraryRootChoice.CreateChild -> picked.createDirectory(FOLDER_NAME)
-        }
-    }
-
-    /**
-     * True when a subdirectory other than MermaidPocket already holds `.mmd`
-     * files. Bounded so granting `Documents` does not walk the whole tree.
-     */
-    private fun hasMmdOutsidePocket(children: List<DocumentFile>): Boolean {
-        var visits = 0
-        fun walk(dir: DocumentFile, depth: Int): Boolean {
-            if (depth > 6 || visits > 250) return false
-            visits++
-            for (doc in dir.listFiles()) {
-                val name = doc.name ?: continue
-                if (name.startsWith(".")) continue
-                if (doc.isFile && LibraryListing.isDiagramFileName(name)) return true
-                if (doc.isDirectory && walk(doc, depth + 1)) return true
-            }
-            return false
-        }
-        return children.any { doc ->
-            doc.isDirectory &&
-                !doc.name.equals(FOLDER_NAME, ignoreCase = true) &&
-                walk(doc, 1)
         }
     }
 
     fun isLibraryDocument(uri: Uri): Boolean {
         val library = libraryDocumentId() ?: return false
         val document = documentId(uri) ?: return false
-        return LibraryMembership.relativePath(library, document) != null
+        return LibraryMembership.directChildName(library, document) != null
     }
 
     private class DocumentRemote(
         private val context: Context,
         private val root: DocumentFile,
+        private val tree: Uri,
     ) : RemoteDiagrams {
         override fun list(): List<RemoteFile> {
-            return catalog().map { (storeName, found) ->
-                RemoteFile(
-                    name = storeName,
-                    modifiedAt = found.doc.lastModified(),
-                    relativePath = found.relativePath,
-                )
+            return diagrams().map { (name, row) ->
+                RemoteFile(name = name, modifiedAt = row.lastModified, relativePath = name)
             }
         }
 
@@ -161,7 +146,6 @@ class DurableDocuments(
             context.contentResolver.openOutputStream(doc.uri, "wt")?.use { output ->
                 output.write(text.toByteArray(Charsets.UTF_8))
             } ?: error("Could not write $name")
-            // Document providers stamp their own mtime. Equal text skips a later rewrite.
         }
 
         override fun delete(name: String) {
@@ -169,36 +153,17 @@ class DurableDocuments(
         }
 
         private fun find(name: String): DocumentFile? {
-            return catalog()[name]?.doc
-        }
-
-        private data class Found(val relativePath: String, val doc: DocumentFile)
-
-        /**
-         * Every `.mmd` under [root], keyed by the flat working-copy name.
-         * Nested files stay in place; only the list identity is flattened.
-         */
-        private fun catalog(): Map<String, Found> {
-            val found = mutableListOf<Found>()
-            collect(root, prefix = "", into = found)
-            val names = LibraryListing.storeNames(found.map { it.relativePath })
-            return found.associate { entry ->
-                val storeName = names.getValue(entry.relativePath)
-                storeName to entry
+            val match = diagrams().firstOrNull { (listed, _) -> listed == name } ?: return null
+            documentFile(context, tree, match.second)?.let { return it }
+            return root.listFiles().firstOrNull { doc ->
+                LibraryChildren.displayName(doc.name, null) == name
             }
         }
 
-        private fun collect(dir: DocumentFile, prefix: String, into: MutableList<Found>) {
-            for (doc in dir.listFiles()) {
-                val name = doc.name ?: continue
-                if (name.startsWith(".")) continue
-                if (doc.isDirectory) {
-                    val childPrefix = if (prefix.isEmpty()) name else "$prefix/$name"
-                    collect(doc, childPrefix, into)
-                } else if (doc.isFile && LibraryListing.isDiagramFileName(name)) {
-                    val relative = if (prefix.isEmpty()) name else "$prefix/$name"
-                    into.add(Found(relative, doc))
-                }
+        private fun diagrams(): List<Pair<String, LibraryChildRow>> {
+            return LibraryChildren.diagrams(queryChildren(context, tree, root)).map { row ->
+                val name = checkNotNull(row.name)
+                name to row
             }
         }
     }
@@ -208,5 +173,84 @@ class DurableDocuments(
         const val DISPLAY_PATH = "Documents/MermaidPocket"
         private const val MIME = "text/plain"
         private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
+        private const val PAGE_SIZE = 256
+        private const val MAX_CHILDREN = 10_000
+
+        internal fun queryChildren(context: Context, tree: Uri, parent: DocumentFile): List<LibraryChildRow> {
+            val parentId = runCatching { DocumentsContract.getDocumentId(parent.uri) }.getOrNull()
+            if (parentId != null) {
+                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+                val projection = arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                )
+                val paged = queryPaged(context.contentResolver, childrenUri, projection)
+                if (paged.isNotEmpty()) return paged
+                val plain = context.contentResolver.query(childrenUri, projection, null, null, null)
+                    ?.use { cursor -> readRows(cursor) }
+                    .orEmpty()
+                if (plain.isNotEmpty()) return plain
+            }
+            return parent.listFiles().map { doc ->
+                LibraryChildRow(
+                    name = doc.name,
+                    mimeType = doc.type,
+                    documentId = runCatching { DocumentsContract.getDocumentId(doc.uri) }.getOrNull(),
+                    lastModified = doc.lastModified(),
+                )
+            }
+        }
+
+        private fun queryPaged(
+            resolver: ContentResolver,
+            childrenUri: Uri,
+            projection: Array<String>,
+        ): List<LibraryChildRow> {
+            val rows = mutableListOf<LibraryChildRow>()
+            var offset = 0
+            while (offset < MAX_CHILDREN) {
+                val extras = Bundle().apply {
+                    putInt(ContentResolver.QUERY_ARG_LIMIT, PAGE_SIZE)
+                    putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+                }
+                val batch = runCatching {
+                    resolver.query(childrenUri, projection, extras, null)?.use { cursor ->
+                        readRows(cursor)
+                    }
+                }.getOrNull() ?: return rows
+                if (batch.isEmpty()) return rows
+                rows.addAll(batch)
+                if (batch.size < PAGE_SIZE) return rows
+                offset += batch.size
+            }
+            return rows
+        }
+
+        private fun readRows(cursor: Cursor): List<LibraryChildRow> {
+            val idIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val modifiedIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            val rows = mutableListOf<LibraryChildRow>()
+            while (cursor.moveToNext()) {
+                rows.add(
+                    LibraryChildRow(
+                        name = if (nameIdx >= 0) cursor.getString(nameIdx) else null,
+                        mimeType = if (mimeIdx >= 0) cursor.getString(mimeIdx) else null,
+                        documentId = if (idIdx >= 0) cursor.getString(idIdx) else null,
+                        lastModified = if (modifiedIdx >= 0) cursor.getLong(modifiedIdx) else 0L,
+                    ),
+                )
+            }
+            return rows
+        }
+
+        private fun documentFile(context: Context, tree: Uri, row: LibraryChildRow): DocumentFile? {
+            val id = row.documentId ?: return null
+            val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
+            return DocumentFile.fromSingleUri(context, uri)
+        }
     }
 }

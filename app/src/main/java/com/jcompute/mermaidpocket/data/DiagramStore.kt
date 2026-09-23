@@ -96,8 +96,7 @@ class DiagramStore(private val filesDir: File) {
      * Does not invent a new slug.
      */
     fun importFile(name: String, source: String, modifiedAt: Long): File {
-        require('/' !in name && '\\' !in name && ".." !in name) { "Not a diagram name" }
-        require(name.endsWith(".mmd", ignoreCase = true) && name != ".mmd") { "Not a diagram name" }
+        require(LibraryMembership.isDiagramFileName(name)) { "Not a diagram name" }
         val file = File(dir, name)
         val parent = file.parentFile?.canonicalFile
         check(parent == dir.canonicalFile) { "Diagram path escaped the library" }

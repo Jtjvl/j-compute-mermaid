@@ -34,6 +34,8 @@ class LibraryMembershipTest {
         assertNull(LibraryMembership.directChildName(library, null))
         assertFalse(LibraryMembership.isDiagramFileName("../escape.mmd"))
         assertFalse(LibraryMembership.isDiagramFileName("nested/flow.mmd"))
+        assertTrue(LibraryMembership.isDiagramFileName("rev..2.mmd"))
+        assertFalse(LibraryMembership.isDiagramFileName(".."))
     }
 
     @Test
@@ -71,30 +73,6 @@ class LibraryMembershipTest {
                 libraryText = { source },
             ),
         )
-    }
-
-    @Test
-    fun nestedLibraryMmdIsIndexedAsADescendant() {
-        assertEquals(
-            "nested-flow.mmd",
-            LibraryMembership.descendantName(library, "$library/nested/flow.mmd", emptySet()),
-        )
-        assertEquals(
-            "flow.mmd",
-            LibraryMembership.descendantName(library, "$library/nested/flow.mmd", setOf("flow.mmd")),
-        )
-        assertEquals(
-            "nested-flow.mmd",
-            LibraryMembership.nameToIndex(
-                libraryDocumentId = library,
-                documentId = "$library/nested/flow.mmd",
-                displayName = "flow.mmd",
-                libraryNames = emptySet(),
-                writtenText = "flowchart TD\n  A-->B",
-                libraryText = { null },
-            ),
-        )
-        assertNull(LibraryMembership.relativePath(library, "primary:Documents/MermaidPocketBackup/flow.mmd"))
     }
 
     @Test

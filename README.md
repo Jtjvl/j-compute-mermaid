@@ -116,7 +116,7 @@ minSdk 26.
 ## Files
 
 - **Save** of `.mmd` writes `Documents/MermaidPocket/<name>.mmd` (and a working copy under `filesDir/diagrams/`). Preview PNGs stay in `diagrams/.thumbs/`
-- **Files** lists every `.mmd` under the granted library tree, including nested folders (working copies stay flat; colliding basenames get a folder prefix). Each row shows the parsed title and the `.mmd` file name, so two diagrams can share a title. Opening a listed row sets the chrome filename and parsed title to that row.
+- **Files** lists every peer `.mmd` in the granted library folder (name match, including files with no MIME). Each row shows the parsed title and the `.mmd` file name, so two diagrams can share a title. Opening a listed row sets the chrome filename and parsed title to that row.
 - Long-press a row to multi-select and bulk-delete; swipe deletes one file; the share icon sends that `.mmd`
 - Unsaved paste/share stays in memory until you save
 

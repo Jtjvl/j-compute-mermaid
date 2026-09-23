@@ -204,24 +204,33 @@ class DiagramSync(
     fun reconcile(): SyncReport {
         val remote = remoteProvider() ?: return SyncReport(0, 0)
         val localFiles = local.list()
-        val remoteFiles = remote.list().filter { it.name.endsWith(".mmd", ignoreCase = true) }
-        val ops = DiagramSyncPlan.plan(
-            local = localFiles.map { SyncFile(it.name, it.updatedAtMillis, local.read(it.file)) },
-            remote = remoteFiles.map { SyncFile(it.name, it.modifiedAt, remote.read(it.name)) },
-        )
+        val remoteFiles = remote.list().filter { LibraryMembership.isDiagramFileName(it.name) }
+        val localSync = localFiles.mapNotNull { item ->
+            val text = runCatching { local.read(item.file) }.getOrNull() ?: return@mapNotNull null
+            SyncFile(item.name, item.updatedAtMillis, text)
+        }
+        val remoteSync = remoteFiles.mapNotNull { item ->
+            val text = runCatching { remote.read(item.name) }.getOrNull() ?: return@mapNotNull null
+            SyncFile(item.name, item.modifiedAt, text)
+        }
+        val ops = DiagramSyncPlan.plan(local = localSync, remote = remoteSync)
         var pushed = 0
         var pulled = 0
         for (op in ops) {
             when (op) {
                 is SyncOp.Push -> {
-                    val item = local.list().first { it.name == op.name }
-                    remote.write(op.name, local.read(item.file), item.updatedAtMillis)
-                    pushed++
+                    val ok = runCatching {
+                        val item = local.list().first { it.name == op.name }
+                        remote.write(op.name, local.read(item.file), item.updatedAtMillis)
+                    }.isSuccess
+                    if (ok) pushed++
                 }
                 is SyncOp.Pull -> {
-                    val modified = remoteFiles.first { it.name == op.name }.modifiedAt
-                    local.importFile(op.name, remote.read(op.name), modified)
-                    pulled++
+                    val ok = runCatching {
+                        val modified = remoteFiles.first { it.name == op.name }.modifiedAt
+                        local.importFile(op.name, remote.read(op.name), modified)
+                    }.isSuccess
+                    if (ok) pulled++
                 }
             }
         }

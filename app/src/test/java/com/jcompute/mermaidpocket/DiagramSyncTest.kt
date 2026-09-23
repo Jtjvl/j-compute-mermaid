@@ -110,6 +110,9 @@ class DiagramSyncTest {
         val failed = runCatching { store.importFile("../escape.mmd", "nope", 1) }
         assertTrue(failed.isFailure)
         assertFalse(File(root, "escape.mmd").exists())
+        val dotted = store.importFile("rev..2.mmd", "flowchart TD\n  A-->B", 1)
+        assertEquals("rev..2.mmd", dotted.name)
+        assertTrue(dotted.isFile)
     }
 
     @Test
@@ -228,7 +231,7 @@ class DiagramSyncTest {
     }
 
     @Test
-    fun reconcilePullsSevenFilesWithMixedNestingNames() {
+    fun reconcilePullsSevenSiblingFilesIncludingOddNames() {
         val paths = listOf(
             "one.mmd",
             "two.mmd",
@@ -236,7 +239,7 @@ class DiagramSyncTest {
             "four.mmd",
             "five.mmd",
             "six.mmd",
-            "seven.mmd",
+            "rev..2.mmd",
         )
         paths.forEachIndexed { index, name ->
             remote.write(name, "%% $name\nflowchart TD\n  A-->B", modifiedAt = (index + 1) * 10L)
@@ -247,6 +250,7 @@ class DiagramSyncTest {
         assertEquals(0, report.pushed)
         assertEquals(paths.toSet(), sync.list().map { it.name }.toSet())
         assertEquals(7, sync.list().map { it.file.canonicalPath }.distinct().size)
+        assertEquals(7, sync.list().map { it.title }.distinct().size)
     }
 
     @Test

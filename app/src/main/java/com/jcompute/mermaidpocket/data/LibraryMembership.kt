@@ -13,7 +13,8 @@ package com.jcompute.mermaidpocket.data
 object LibraryMembership {
     fun isDiagramFileName(name: String): Boolean {
         if (name.isBlank()) return false
-        if ('/' in name || '\\' in name || ".." in name) return false
+        if ('/' in name || '\\' in name) return false
+        if (name == "." || name == "..") return false
         if (name.equals(".mmd", ignoreCase = true)) return false
         return name.endsWith(".mmd", ignoreCase = true)
     }
@@ -42,27 +43,8 @@ object LibraryMembership {
     }
 
     /**
-     * Working-copy name for a library descendant `.mmd`.
-     * A listed basename wins when it is already in [libraryNames]; otherwise a
-     * flattened relative path is used so nested files can be indexed.
-     */
-    fun descendantName(
-        libraryDocumentId: String?,
-        documentId: String?,
-        libraryNames: Set<String>,
-    ): String? {
-        val relative = relativePath(libraryDocumentId, documentId) ?: return null
-        val base = LibraryListing.basename(relative)
-        if (!isDiagramFileName(base)) return null
-        if (base in libraryNames) return base
-        val flat = LibraryListing.flatten(relative)
-        if (flat in libraryNames) return flat
-        return if (base == relative) base else flat
-    }
-
-    /**
      * Name to upsert after an `.mmd` export, or null when this write is not a library file.
-     * A descendant of the library wins. Otherwise [displayName] counts only when that
+     * A direct child of the library wins. Otherwise [displayName] counts only when that
      * library file already exists and its text is the text just written.
      */
     fun nameToIndex(
@@ -73,7 +55,7 @@ object LibraryMembership {
         writtenText: String,
         libraryText: (String) -> String?,
     ): String? {
-        descendantName(libraryDocumentId, documentId, libraryNames)?.let { return it }
+        directChildName(libraryDocumentId, documentId)?.let { return it }
         val candidate = displayName?.takeIf { isDiagramFileName(it) && it in libraryNames } ?: return null
         val existing = libraryText(candidate) ?: return null
         return candidate.takeIf { existing == writtenText }

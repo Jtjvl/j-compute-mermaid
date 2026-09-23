@@ -51,6 +51,13 @@ object LibraryOpen {
 
     private fun uniqueAmong(slug: String, existingNames: Set<String>): String {
         val used = existingNames.toMutableSet()
-        return LibraryListing.uniquify("$slug.mmd", used)
+        val preferred = "$slug.mmd"
+        if (used.add(preferred)) return preferred
+        var index = 1
+        while (true) {
+            val candidate = "$slug-$index.mmd"
+            if (used.add(candidate)) return candidate
+            index++
+        }
     }
 }
