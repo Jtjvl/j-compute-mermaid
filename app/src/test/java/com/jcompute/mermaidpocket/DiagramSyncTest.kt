@@ -110,6 +110,9 @@ class DiagramSyncTest {
         val failed = runCatching { store.importFile("../escape.mmd", "nope", 1) }
         assertTrue(failed.isFailure)
         assertFalse(File(root, "escape.mmd").exists())
+        val dotted = store.importFile("rev..2.mmd", "flowchart TD\n  A-->B", 1)
+        assertEquals("rev..2.mmd", dotted.name)
+        assertTrue(dotted.isFile)
     }
 
     @Test
@@ -225,6 +228,45 @@ class DiagramSyncTest {
         assertEquals(listOf("copy.mmd"), sync.list().map { it.name })
         assertEquals(source, sync.read(sync.list().single().file))
         assertTrue(remote.files.isEmpty())
+    }
+
+    @Test
+    fun reconcilePullsSevenSiblingFilesIncludingOddNames() {
+        val paths = listOf(
+            "one.mmd",
+            "two.mmd",
+            "three.mmd",
+            "four.mmd",
+            "five.mmd",
+            "six.mmd",
+            "rev..2.mmd",
+        )
+        paths.forEachIndexed { index, name ->
+            remote.write(name, "%% $name\nflowchart TD\n  A-->B", modifiedAt = (index + 1) * 10L)
+        }
+        val sync = sync()
+        val report = sync.reconcile()
+        assertEquals(7, report.pulled)
+        assertEquals(0, report.pushed)
+        assertEquals(paths.toSet(), sync.list().map { it.name }.toSet())
+        assertEquals(7, sync.list().map { it.file.canonicalPath }.distinct().size)
+        assertEquals(7, sync.list().map { it.title }.distinct().size)
+    }
+
+    @Test
+    fun linkOpenedCopiesAMissingFileAndSaveOverwritesIt() {
+        val sync = sync()
+        val source = "%% External\nflowchart TD\n  A-->B"
+        val linked = sync.linkOpened("external.mmd", source)
+        assertEquals("external.mmd", linked.file.name)
+        assertEquals(source, sync.read(linked.file))
+        assertEquals(setOf("external.mmd"), remote.files.keys)
+        assertEquals(listOf("external.mmd"), sync.list().map { it.name })
+
+        val again = sync.write(linked.file, "%% External\nflowchart TD\n  A-->C")
+        assertEquals(linked.file.canonicalPath, again.file.canonicalPath)
+        assertEquals("%% External\nflowchart TD\n  A-->C", remote.files.getValue("external.mmd").first)
+        assertEquals(1, sync.list().size)
     }
 
     @Test

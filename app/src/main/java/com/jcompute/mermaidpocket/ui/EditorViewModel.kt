@@ -15,6 +15,9 @@ import com.jcompute.mermaidpocket.data.AppSettings
 import com.jcompute.mermaidpocket.data.DiagramTheme
 import com.jcompute.mermaidpocket.data.DiagramSync
 import com.jcompute.mermaidpocket.data.DurableDocuments
+import com.jcompute.mermaidpocket.data.LibraryOpen
+import com.jcompute.mermaidpocket.data.MermaidIngest
+import com.jcompute.mermaidpocket.data.RemoteFile
 import com.jcompute.mermaidpocket.data.StoredDiagram
 import com.jcompute.mermaidpocket.data.TitleParser
 import com.jcompute.mermaidpocket.export.ExportFormat
@@ -257,33 +260,14 @@ class EditorViewModel(
     }
 
     /**
-     * Paste, Open, and share-intent replace the buffer and drop [EditorUiState.currentFile].
+     * Paste and share-of-text replace the buffer and drop [EditorUiState.currentFile].
      * Save then creates a new library file instead of overwriting the previously linked one.
+     * Open… / Open-with of a `.mmd` go through [openImported] and stay linked.
      */
     fun ingest(text: String, fileName: String? = null) {
         val link = EditorLink.imported(text, fileName)
-        val source = link.source
-        history.checkpoint(source, System.currentTimeMillis())
-        _state.update {
-            val pass = RenderPass.next(it.renderEpoch, source)
-            it.copy(
-                screen = Screen.Document,
-                currentFile = link.currentFile,
-                source = source,
-                savedSource = link.savedSource,
-                title = link.title,
-                mode = EditorMode.View,
-                renderEpoch = pass.epoch,
-                isRendering = pass.showSpinner,
-                renderError = null,
-                previewPng = null,
-                selection = FileSelection(),
-                immersiveView = false,
-                canUndo = history.canUndo,
-                canRedo = history.canRedo,
-            )
-        }
-        if (source.isBlank()) {
+        applyLink(link, checkpointHistory = true)
+        if (link.source.isBlank()) {
             notify("Nothing to paste.")
         }
     }
@@ -307,40 +291,67 @@ class EditorViewModel(
                 notify(error.message ?: "Could not open that content.")
                 return@launch
             } ?: return@launch
-            ingest(document.text, fileName = document.displayName)
+            if (LibraryOpen.candidateName(document.displayName) != null) {
+                openImported(document.text, document.displayName)
+            } else {
+                ingest(document.text, fileName = document.displayName)
+            }
         }
     }
 
     fun openStored(file: File) {
         viewModelScope.launch {
             val source = withContext(Dispatchers.IO) { sync.read(file) }
-            val link = EditorLink.stored(file, source)
-            history.reset(source)
-            _state.update {
-                val pass = RenderPass.next(it.renderEpoch, source)
-                it.copy(
-                    screen = Screen.Document,
-                    currentFile = link.currentFile,
-                    source = link.source,
-                    savedSource = link.savedSource,
-                    title = link.title,
-                    mode = EditorMode.View,
-                    renderEpoch = pass.epoch,
-                    isRendering = pass.showSpinner,
-                    previewPng = null,
-                    renderError = null,
-                    selection = FileSelection(),
-                    immersiveView = false,
-                    canUndo = history.canUndo,
-                    canRedo = history.canRedo,
-                )
-            }
+            applyLink(EditorLink.stored(file, source), checkpointHistory = false)
         }
     }
 
-    /** Open text that is not already a library file. [ingest] unlinks the previous diagram. */
-    fun openImported(text: String, fileName: String?) {
-        ingest(text, fileName)
+    /**
+     * Open a `.mmd` from the picker or a file manager. Links it into the library
+     * (copy or reuse the working copy) so Files shows an Open marker and Save
+     * overwrites that file. Blank / New / paste stay unlinked.
+     */
+    fun openImported(text: String, fileName: String?, underLibrary: Boolean = false) {
+        viewModelScope.launch {
+            val source = MermaidIngest.extractSource(text)
+            if (source.isBlank()) {
+                notify("Nothing to open.")
+                return@launch
+            }
+            val written = withContext(Dispatchers.IO) {
+                sync.linkOpened(fileName = fileName, source = source, underLibrary = underLibrary)
+            }
+            applyLink(EditorLink.stored(written.file, source), checkpointHistory = false)
+            refreshFiles()
+        }
+    }
+
+    fun loadLibraryOpenRows(onLoaded: (List<RemoteFile>) -> Unit) {
+        viewModelScope.launch {
+            val rows = withContext(Dispatchers.IO) { sync.remoteList() }
+            onLoaded(rows.sortedBy { it.relativePath.lowercase() })
+        }
+    }
+
+    fun openLibraryTreeFile(name: String) {
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) {
+                sync.list().firstOrNull { it.name.equals(name, ignoreCase = true) }?.file
+                    ?: run {
+                        val text = sync.readRemote(name) ?: return@withContext null
+                        sync.linkOpened(
+                            fileName = name,
+                            source = MermaidIngest.extractSource(text),
+                            underLibrary = true,
+                        ).file
+                    }
+            }
+            if (file == null) {
+                notify("Could not open that file.")
+                return@launch
+            }
+            openStored(file)
+        }
     }
 
     fun enterSelection(file: File) {
@@ -413,6 +424,8 @@ class EditorViewModel(
     }
 
     fun suggestedDiagramFolder(): Uri = durable.suggestedInitialUri()
+
+    fun isLibraryDocument(uri: Uri): Boolean = durable.isLibraryDocument(uri)
 
     fun grantDiagramFolder(uri: Uri) {
         viewModelScope.launch {
@@ -581,6 +594,33 @@ class EditorViewModel(
         }
         if (deletedCount <= 0) return
         notify(if (deletedCount == 1) "Deleted 1 diagram" else "Deleted $deletedCount diagrams")
+    }
+
+    private fun applyLink(link: LinkedDocument, checkpointHistory: Boolean) {
+        if (checkpointHistory) {
+            history.checkpoint(link.source, System.currentTimeMillis())
+        } else {
+            history.reset(link.source)
+        }
+        _state.update {
+            val pass = RenderPass.next(it.renderEpoch, link.source)
+            it.copy(
+                screen = Screen.Document,
+                currentFile = link.currentFile,
+                source = link.source,
+                savedSource = link.savedSource,
+                title = link.title,
+                mode = EditorMode.View,
+                renderEpoch = pass.epoch,
+                isRendering = pass.showSpinner,
+                previewPng = null,
+                renderError = null,
+                selection = FileSelection(),
+                immersiveView = false,
+                canUndo = history.canUndo,
+                canRedo = history.canRedo,
+            )
+        }
     }
 
     private fun refreshFiles() {
