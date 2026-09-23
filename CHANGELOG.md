@@ -2,6 +2,13 @@
 
 User-facing releases only. See [VERSIONING.md](VERSIONING.md).
 
+## 0.3.4
+
+- Files lists all sibling `.mmd` peers (null MIME / `DocumentFile.isFile` false no longer drops desktop copies; `..` in names allowed; reconcile continues on one bad peer)
+- Open… / open-with links into the library so Save overwrites that file and Files shows Open
+- Title and fileName match Files after open
+- In-app Open list so Back returns to the app (system SAF Back still walks folders)
+
 ## 0.3.3
 
 - CI failures also POST to Hephaestus webhook
