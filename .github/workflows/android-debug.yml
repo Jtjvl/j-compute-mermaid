@@ -137,14 +137,21 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Merge pull request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           TESTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_LABEL: ${{ github.event.pull_request.head.label }}
         run: |
           set -euo pipefail
-          CURRENT="$(gh pr view "$PR" --json headRefOid,isDraft,mergeable,state --jq '{head:.headRefOid,draft:.isDraft,mergeable:.mergeable,state:.state}')"
+          CURRENT="$(gh pr view "$PR" --repo "$GH_REPO" --json headRefOid,isDraft,mergeable,state --jq '{head:.headRefOid,draft:.isDraft,mergeable:.mergeable,state:.state}')"
           HEAD="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["head"])')"
           DRAFT="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["draft"])')"
           STATE="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
@@ -165,12 +172,16 @@ jobs:
             echo "::error::PR #${PR} has conflicts."
             exit 1
           fi
-          if gh pr merge "$PR" --merge; then
+          # REST merge does not need a local checkout; sha pins the tested head.
+          if gh api --method PUT "repos/${GH_REPO}/pulls/${PR}/merge" \
+            -f merge_method=merge \
+            -f sha="${TESTED_HEAD}" \
+            -f commit_title="Merge pull request #${PR} from ${HEAD_LABEL}"; then
             echo "Merged PR #${PR}."
             exit 0
           fi
           echo "Direct merge blocked (checks may still be required). Enabling auto-merge."
-          gh pr merge "$PR" --merge --auto
+          gh pr merge "$PR" --repo "$GH_REPO" --merge --auto
 
   alert-on-failure:
     name: Alert on failure
