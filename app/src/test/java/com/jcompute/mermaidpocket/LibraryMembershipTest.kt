@@ -34,6 +34,8 @@ class LibraryMembershipTest {
         assertNull(LibraryMembership.directChildName(library, null))
         assertFalse(LibraryMembership.isDiagramFileName("../escape.mmd"))
         assertFalse(LibraryMembership.isDiagramFileName("nested/flow.mmd"))
+        assertTrue(LibraryMembership.isDiagramFileName("rev..2.mmd"))
+        assertFalse(LibraryMembership.isDiagramFileName(".."))
     }
 
     @Test

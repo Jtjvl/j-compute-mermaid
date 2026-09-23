@@ -13,20 +13,33 @@ package com.jcompute.mermaidpocket.data
 object LibraryMembership {
     fun isDiagramFileName(name: String): Boolean {
         if (name.isBlank()) return false
-        if ('/' in name || '\\' in name || ".." in name) return false
+        if ('/' in name || '\\' in name) return false
+        if (name == "." || name == "..") return false
         if (name.equals(".mmd", ignoreCase = true)) return false
         return name.endsWith(".mmd", ignoreCase = true)
     }
 
     /** File name when [documentId] is a direct `.mmd` child of [libraryDocumentId]. */
     fun directChildName(libraryDocumentId: String?, documentId: String?): String? {
+        val relative = relativePath(libraryDocumentId, documentId) ?: return null
+        if ('/' in relative || '\\' in relative) return null
+        if (!isDiagramFileName(relative)) return null
+        return relative
+    }
+
+    /**
+     * Path under the library document, or null when [documentId] is not a descendant.
+     * Nested segments stay slash-separated (`nested/flow.mmd`).
+     */
+    fun relativePath(libraryDocumentId: String?, documentId: String?): String? {
         val library = libraryDocumentId?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
         val document = documentId?.takeIf { it.isNotEmpty() } ?: return null
         val prefix = "$library/"
         if (!document.startsWith(prefix)) return null
-        val name = document.removePrefix(prefix)
-        if (!isDiagramFileName(name)) return null
-        return name
+        val relative = document.removePrefix(prefix)
+        val parts = relative.split('/').filter { it.isNotEmpty() }
+        if (parts.isEmpty() || parts.any { it == ".." || it == "." }) return null
+        return parts.joinToString("/")
     }
 
     /**

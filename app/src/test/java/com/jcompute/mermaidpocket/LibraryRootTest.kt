@@ -55,6 +55,21 @@ class LibraryRootTest {
     }
 
     @Test
+    fun sevenPeerMmdFilesMakeThePickedFolderTheLibrary() {
+        val children = listOf(
+            LibraryChild("one.mmd", directory = false),
+            LibraryChild("two.mmd", directory = false),
+            LibraryChild("three.mmd", directory = false),
+            LibraryChild("four.mmd", directory = false),
+            LibraryChild("five.mmd", directory = false),
+            LibraryChild("six.mmd", directory = false),
+            LibraryChild("seven.mmd", directory = false),
+            LibraryChild("MermaidPocket", directory = true),
+        )
+        assertEquals(LibraryRootChoice.Picked, LibraryRoot.choose("Notes", children))
+    }
+
+    @Test
     fun durableDocumentsFollowsThePlacementChoice() {
         val src = source("app/src/main/java/com/jcompute/mermaidpocket/data/DurableDocuments.kt")
         assertTrue(src.contains("LibraryRoot.choose"))
