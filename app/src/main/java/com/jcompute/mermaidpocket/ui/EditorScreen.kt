@@ -51,6 +51,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,6 +81,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -228,6 +231,7 @@ fun MermaidAppRoot(
                         selection = state.selection,
                         onCancelSelection = viewModel::cancelSelection,
                         onDeleteSelected = { confirmBulkDelete = true },
+                        onNew = viewModel::newDiagram,
                     )
                 } else {
                     DocumentTopBar(
@@ -253,6 +257,7 @@ fun MermaidAppRoot(
                         },
                         onAppearance = viewModel::setAppearance,
                         onDiagramTheme = viewModel::setDiagramTheme,
+                        onNew = viewModel::newDiagram,
                     )
                 }
             }
@@ -269,17 +274,27 @@ fun MermaidAppRoot(
                     mode = state.mode,
                     onFiles = viewModel::showFiles,
                     onMode = viewModel::setMode,
-                    onNew = viewModel::newDiagram,
                 )
             }
         },
         floatingActionButton = {
-            if (showLiveDiagram && !hideChrome) {
-                ExtendedFloatingActionButton(
-                    onClick = viewModel::copyImage,
-                    icon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
-                    text = { Text("Copy image") },
-                )
+            val saveChrome = EditSaveChrome.of(linked = state.currentFile != null)
+            when {
+                EditSaveChrome.visible(state.screen, state.mode) -> {
+                    DiagramCornerControl(
+                        onClick = viewModel::save,
+                        icon = Icons.Outlined.Save,
+                        contentDescription = saveChrome.contentDescription,
+                    )
+                }
+                showLiveDiagram && !hideChrome -> {
+                    DiagramCornerControl(
+                        onClick = viewModel::copyImage,
+                        icon = Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        label = "Copy image",
+                    )
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -329,7 +344,6 @@ fun MermaidAppRoot(
                         onOpenExternal = {
                             openDocument.launch(arrayOf("text/plain", "text/markdown", "text/*", "*/*"))
                         },
-                        onNew = viewModel::newDiagram,
                         onShare = viewModel::shareStored,
                     )
                 }
@@ -428,6 +442,7 @@ private fun DocumentTopBar(
     onOpen: () -> Unit,
     onAppearance: (Appearance) -> Unit,
     onDiagramTheme: (DiagramTheme) -> Unit,
+    onNew: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var aboutOpen by remember { mutableStateOf(false) }
@@ -480,6 +495,14 @@ private fun DocumentTopBar(
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("New") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onNew()
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text("Save") },
                         leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null) },
@@ -555,7 +578,6 @@ private fun DocumentBottomBar(
     mode: EditorMode,
     onFiles: () -> Unit,
     onMode: (EditorMode) -> Unit,
-    onNew: () -> Unit,
 ) {
     NavigationBar {
         NavigationBarItem(
@@ -575,11 +597,38 @@ private fun DocumentBottomBar(
                 }
             }
         }
-        NavigationBarItem(
-            selected = false,
-            onClick = onNew,
-            icon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = "New") },
-            label = { Text("New") },
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+/**
+ * Lower-corner control shared by Edit Save and diagram-view Copy image.
+ * Same shape, elevation, and scaffold inset. Save passes no [label].
+ */
+@Composable
+private fun DiagramCornerControl(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    contentDescription: String?,
+    label: String? = null,
+) {
+    val shape = FloatingActionButtonDefaults.extendedFabShape
+    val elevation = FloatingActionButtonDefaults.elevation()
+    if (label == null) {
+        FloatingActionButton(
+            onClick = onClick,
+            shape = shape,
+            elevation = elevation,
+        ) {
+            Icon(icon, contentDescription = contentDescription)
+        }
+    } else {
+        ExtendedFloatingActionButton(
+            onClick = onClick,
+            shape = shape,
+            elevation = elevation,
+            icon = { Icon(icon, contentDescription = contentDescription) },
+            text = { Text(label) },
         )
     }
 }
