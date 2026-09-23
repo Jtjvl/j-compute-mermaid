@@ -35,3 +35,30 @@ data class ViewChrome(
         }
     }
 }
+
+/**
+ * Edit-view Save control.
+ *
+ * Stays visible for a blank (no linked file). The first tap creates a library
+ * `.mmd` and links it; later taps overwrite that file. The glyph has no text label.
+ */
+data class EditSaveChrome(
+    val contentDescription: String,
+    val createsFile: Boolean,
+) {
+    companion object {
+        const val SAVE = "Save"
+        const val SAVE_AS = "Save as"
+
+        fun visible(screen: Screen, mode: EditorMode): Boolean {
+            return screen == Screen.Document && mode == EditorMode.Edit
+        }
+
+        fun of(linked: Boolean): EditSaveChrome {
+            return EditSaveChrome(
+                contentDescription = if (linked) SAVE else SAVE_AS,
+                createsFile = !linked,
+            )
+        }
+    }
+}

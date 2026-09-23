@@ -23,6 +23,8 @@ Paste and share-to-app are equal ingest paths.
 
 ## Edit
 
+- **Save** floats in the lower corner of Edit, the same control family as diagram-view **Copy image** (size, elevation, corner padding, shape) with a Save glyph and no text label. A linked file is overwritten. A blank is not linked to an existing file: the control stays visible, the first tap creates the `.mmd` and links it (announced as **Save as**), and later taps save that file.
+- **New** is menu-only (document overflow, and the Files overflow). It starts a blank `.mmd` that is not linked to any existing file. There is no lower-corner New control.
 - **Copy all** in the toolbar copies the entire source. Long-press the editor does the same and shows a short confirmation.
 - **Undo / Redo** walk prior source text (not theme). Toolbar buttons, plus a swipe on the Edit history strip (right undoes, left redoes). About 40 steps; rapid keystrokes collapse into one step. Restoring a step updates the Edit buffer. View refreshes from that source when you switch to View.
 

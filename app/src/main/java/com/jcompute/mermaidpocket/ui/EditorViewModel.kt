@@ -371,10 +371,13 @@ class EditorViewModel(
         viewModelScope.launch {
             val snapshot = _state.value
             val result = withContext(Dispatchers.IO) {
-                val target = snapshot.currentFile ?: sync.uniqueFile(TitleParser.fileSlug(snapshot.title))
-                val written = sync.write(target, snapshot.source)
-                snapshot.previewPng?.let { sync.writeThumbnail(written.file, it) }
-                written
+                LibrarySave.commit(
+                    sync = sync,
+                    currentFile = snapshot.currentFile,
+                    title = snapshot.title,
+                    source = snapshot.source,
+                    thumbnail = snapshot.previewPng,
+                )
             }
             _state.update {
                 it.copy(
@@ -485,11 +488,13 @@ class EditorViewModel(
             if (format != ExportFormat.Mmd) _state.update { it.copy(isExporting = true) }
             runCatching {
                 val bytes = renderExport(format, widthPx)
-                withContext(Dispatchers.IO) {
+                val indexed = withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(bytes)
                     } ?: error("Could not write that file.")
+                    format == ExportFormat.Mmd && indexSavedMmd(uri, bytes)
                 }
+                if (indexed) refreshFiles()
                 val shown = IncomingContent.displayName(
                     getApplication<Application>().contentResolver,
                     uri,
@@ -500,6 +505,20 @@ class EditorViewModel(
             }
             _state.update { it.copy(isExporting = false) }
         }
+    }
+
+    /**
+     * Save-a-copy writes through SAF and does not pass through [DiagramSync.write].
+     * When the destination is the granted library folder, upsert that `.mmd` so Files lists it.
+     */
+    private fun indexSavedMmd(uri: Uri, bytes: ByteArray): Boolean {
+        val resolver = getApplication<Application>().contentResolver
+        return sync.upsertSavedCopy(
+            libraryDocumentId = durable.libraryDocumentId(),
+            documentId = durable.documentId(uri),
+            displayName = IncomingContent.displayName(resolver, uri),
+            source = bytes.toString(Charsets.UTF_8),
+        )
     }
 
     fun shareStored(file: File) {

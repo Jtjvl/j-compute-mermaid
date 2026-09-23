@@ -91,6 +91,47 @@ class DiagramSync(
         return write(local.uniqueFile(TitleParser.fileSlug(title)), source)
     }
 
+    /**
+     * Index an `.mmd` that Save-a-copy just wrote.
+     * Returns true when that destination is a library file and the working copy was
+     * created or updated, so [list] includes it. Other folders return false.
+     * A listed library file is updated in place when its text is not the export yet.
+     */
+    fun upsertSavedCopy(
+        libraryDocumentId: String?,
+        documentId: String?,
+        displayName: String?,
+        source: String,
+    ): Boolean {
+        val remote = remoteProvider()
+        val listed = remote?.list().orEmpty()
+        val libraryNames = listed.map { it.name }.toSet()
+        val name = LibraryMembership.nameToIndex(
+            libraryDocumentId = libraryDocumentId,
+            documentId = documentId,
+            displayName = displayName,
+            libraryNames = libraryNames,
+            writtenText = source,
+            libraryText = { candidate ->
+                if (remote == null || candidate !in libraryNames) {
+                    null
+                } else {
+                    runCatching { remote.read(candidate) }.getOrNull()
+                }
+            },
+        ) ?: return false
+        val modifiedAt = listed.firstOrNull { it.name == name }?.modifiedAt?.takeIf { it > 0L }
+            ?: System.currentTimeMillis()
+        runCatching { local.importFile(name, source, modifiedAt) }.getOrElse { return false }
+        if (remote != null && name in libraryNames) {
+            val onDisk = runCatching { remote.read(name) }.getOrNull()
+            if (onDisk != null && onDisk != source) {
+                runCatching { remote.write(name, source, System.currentTimeMillis()) }
+            }
+        }
+        return true
+    }
+
     fun delete(file: java.io.File) {
         val name = file.name
         val owned = local.owns(file)
