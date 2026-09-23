@@ -1,3 +1,21 @@
+# Debug APK gate and handoff.
+#
+# pull_request → main: assemble only (no artifact upload).
+# push → main and workflow_dispatch: assemble and upload app-debug.
+# Artifact retention is 2 days. Zeus copies the artifact to downloads within
+# minutes; Actions storage is only a handoff buffer.
+#
+# On failure (pull request, push, and workflow_dispatch), mail ops-alert.
+# Zeus provisioned Stalwart and set these Actions secrets:
+#   STALWART_SMTP_HOST
+#   STALWART_SMTP_PORT   (465, SMTPS — implicit TLS; the step sets secure: true)
+#   STALWART_SMTP_USER   (alerts@j-compute.com)
+#   STALWART_SMTP_PASSWORD
+#   STALWART_SMTP_FROM   (alerts@j-compute.com)
+#   OPS_ALERT_TO         (ops-alert@j-compute.com)
+# From is STALWART_SMTP_FROM. To is OPS_ALERT_TO.
+# If any of those secrets is empty, the notify step warns and skips the send.
+
 name: Android Debug APK
 
 on:
@@ -35,15 +53,18 @@ jobs:
         run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload debug APK
+        if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
 
       - name: Job summary
         if: success()
+        env:
+          UPLOAD_ARTIFACT: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           SIZE_BYTES=$(stat -c%s "$APK")
@@ -54,8 +75,51 @@ jobs:
             echo ""
             echo "| Property | Value |"
             echo "| --- | --- |"
-            echo "| Artifact | \`app-debug\` |"
+            if [ "$UPLOAD_ARTIFACT" = "true" ]; then
+              echo "| Artifact | \`app-debug\` (retained 2 days) |"
+            else
+              echo "| Artifact | not uploaded (pull request gate) |"
+            fi
             echo "| Path | \`$APK\` |"
             echo "| Size | ${SIZE_HUMAN} (${SIZE_BYTES} bytes) |"
             echo "| SHA-256 | \`${SHA256}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check ops-alert SMTP secrets
+        id: ops-alert
+        if: failure()
+        env:
+          HAS_HOST: ${{ secrets.STALWART_SMTP_HOST != '' }}
+          HAS_PORT: ${{ secrets.STALWART_SMTP_PORT != '' }}
+          HAS_USER: ${{ secrets.STALWART_SMTP_USER != '' }}
+          HAS_PASSWORD: ${{ secrets.STALWART_SMTP_PASSWORD != '' }}
+          HAS_FROM: ${{ secrets.STALWART_SMTP_FROM != '' }}
+          HAS_TO: ${{ secrets.OPS_ALERT_TO != '' }}
+        run: |
+          if [ "$HAS_HOST" = "true" ] && [ "$HAS_PORT" = "true" ] && [ "$HAS_USER" = "true" ] && [ "$HAS_PASSWORD" = "true" ] && [ "$HAS_FROM" = "true" ] && [ "$HAS_TO" = "true" ]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "send=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Stalwart SMTP secrets are not set (STALWART_SMTP_HOST, STALWART_SMTP_PORT, STALWART_SMTP_USER, STALWART_SMTP_PASSWORD, STALWART_SMTP_FROM, OPS_ALERT_TO). Skipping failure mail."
+          fi
+
+      - name: Mail ops-alert on failure
+        if: failure() && steps.ops-alert.outputs.send == 'true'
+        uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
+        with:
+          server_address: ${{ secrets.STALWART_SMTP_HOST }}
+          server_port: ${{ secrets.STALWART_SMTP_PORT }}
+          secure: true
+          username: ${{ secrets.STALWART_SMTP_USER }}
+          password: ${{ secrets.STALWART_SMTP_PASSWORD }}
+          from: ${{ secrets.STALWART_SMTP_FROM }}
+          to: ${{ secrets.OPS_ALERT_TO }}
+          subject: "[MermaidPocket CI] failed: ${{ github.event_name }} ${{ github.sha }}"
+          body: |
+            MermaidPocket CI failed.
+
+            Event: ${{ github.event_name }}
+            Branch: ${{ github.head_ref || github.ref_name }}
+            SHA: ${{ github.sha }}
+            Conclusion: ${{ job.status }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
