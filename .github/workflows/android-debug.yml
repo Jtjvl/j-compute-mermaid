@@ -1,33 +1,14 @@
-# Debug APK gate and handoff.
+# Happy path is GitHub-only (no Zeus publish, no Hephaestus tag/webhook):
 #
-# pull_request → main: assemble only (no artifact upload).
-# push → main and workflow_dispatch: assemble and upload app-debug.
-# Artifact retention is 2 days. Zeus copies the artifact to downloads within
-# minutes; Actions storage is only a handoff buffer.
+# pull_request → main (same repo, not draft): assemble, then merge.
+# push → main: assemble, upload app-debug, create vMAJOR.MINOR.PATCH from
+#   versionName when that tag is missing, and attach the APK to the GitHub Release.
+# workflow_dispatch: assemble and upload app-debug (no merge, no tag).
 #
-# On failure (pull request, push, and workflow_dispatch), mail ops-alert,
-# then POST JSON to the Hephaestus routine webhook.
-# Zeus provisioned Stalwart and set these Actions secrets:
-#   STALWART_SMTP_HOST
-#   STALWART_SMTP_PORT   (465, SMTPS — implicit TLS; the step sets secure: true)
-#   STALWART_SMTP_USER   (alerts@j-compute.com)
-#   STALWART_SMTP_PASSWORD
-#   STALWART_SMTP_FROM   (alerts@j-compute.com)
-#   OPS_ALERT_TO         (ops-alert@j-compute.com)
-# From is STALWART_SMTP_FROM. To is OPS_ALERT_TO.
-# If any of those secrets is empty, the notify step warns and skips the send.
+# Pull requests do not upload artifacts. Push/dispatch artifacts stay 2 days.
 #
-# Hephaestus webhook (may be empty until Zeus/Hephaestus fill them):
-#   HEPHAESTUS_WEBHOOK_URL   (routine panel "POST to")
-#   HEPHAESTUS_WEBHOOK_KEY   (routine panel raw key)
-# Authorization is `Authorization: Bearer <HEPHAESTUS_WEBHOOK_KEY>`.
-# The Grok Bot routine panel documents that header: the key is the secret,
-# senders include it as `Authorization: Bearer <key>`, and the copyable
-# "header" field is that same Bearer value.
-# https://cursor.com/help/grok-bot/routines
-# `X-Webhook-Key` is not sent.
-# If either webhook secret is empty, the step warns and skips the POST.
-# That skip does not fail the job.
+# Failures mail ops-alert. Empty SMTP secrets warn and skip; that skip does
+# not fail the job.
 
 name: Android Debug APK
 
@@ -38,6 +19,14 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   assemble-debug:
     name: Assemble debug APK
@@ -46,6 +35,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -66,7 +57,7 @@ jobs:
         run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload debug APK
-        if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
@@ -74,10 +65,41 @@ jobs:
           if-no-files-found: error
           retention-days: 2
 
+      - name: Tag SemVer and publish GitHub Release
+        id: semver
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          eval "$(python3 scripts/ci/semver_release.py env)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists; skipping (versionName was not a new cut)."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "MermaidPocket ${VERSION}"
+          git push origin "${TAG}"
+          NOTES="$(python3 scripts/ci/semver_release.py notes)"
+          ASSET="MermaidPocket-${VERSION}-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "${ASSET}"
+          gh release create "${TAG}" "${ASSET}" \
+            --title "${TAG}" \
+            --notes "${NOTES}" \
+            --target "${GITHUB_SHA}"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
       - name: Job summary
         if: success()
         env:
           UPLOAD_ARTIFACT: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          TAG_CREATED: ${{ steps.semver.outputs.created }}
+          TAG_NAME: ${{ steps.semver.outputs.tag }}
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           SIZE_BYTES=$(stat -c%s "$APK")
@@ -93,14 +115,73 @@ jobs:
             else
               echo "| Artifact | not uploaded (pull request gate) |"
             fi
+            if [ "${TAG_CREATED}" = "true" ]; then
+              echo "| Release | tagged and published \`${TAG_NAME}\` |"
+            elif [ -n "${TAG_NAME}" ]; then
+              echo "| Release | \`${TAG_NAME}\` already existed |"
+            fi
             echo "| Path | \`$APK\` |"
             echo "| Size | ${SIZE_HUMAN} (${SIZE_BYTES} bytes) |"
             echo "| SHA-256 | \`${SHA256}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  auto-merge:
+    name: Merge on green
+    needs: assemble-debug
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          TESTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          CURRENT="$(gh pr view "$PR" --json headRefOid,isDraft,mergeable,state --jq '{head:.headRefOid,draft:.isDraft,mergeable:.mergeable,state:.state}')"
+          HEAD="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["head"])')"
+          DRAFT="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["draft"])')"
+          STATE="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
+          MERGEABLE="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mergeable"])')"
+          if [ "$STATE" = "MERGED" ]; then
+            echo "PR #${PR} is already merged."
+            exit 0
+          fi
+          if [ "$DRAFT" = "True" ]; then
+            echo "PR #${PR} is draft; skip merge."
+            exit 0
+          fi
+          if [ "$HEAD" != "$TESTED_HEAD" ]; then
+            echo "PR head moved (${HEAD} != ${TESTED_HEAD}); not merging a stale green."
+            exit 0
+          fi
+          if [ "$MERGEABLE" = "CONFLICTING" ]; then
+            echo "::error::PR #${PR} has conflicts."
+            exit 1
+          fi
+          if gh pr merge "$PR" --merge; then
+            echo "Merged PR #${PR}."
+            exit 0
+          fi
+          echo "Direct merge blocked (checks may still be required). Enabling auto-merge."
+          gh pr merge "$PR" --merge --auto
+
+  alert-on-failure:
+    name: Alert on failure
+    needs: [assemble-debug, auto-merge]
+    if: ${{ always() && (needs.assemble-debug.result == 'failure' || needs.auto-merge.result == 'failure') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
       - name: Check ops-alert SMTP secrets
         id: ops-alert
-        if: failure()
         env:
           HAS_HOST: ${{ secrets.STALWART_SMTP_HOST != '' }}
           HAS_PORT: ${{ secrets.STALWART_SMTP_PORT != '' }}
@@ -117,7 +198,7 @@ jobs:
           fi
 
       - name: Mail ops-alert on failure
-        if: failure() && steps.ops-alert.outputs.send == 'true'
+        if: steps.ops-alert.outputs.send == 'true'
         uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
         with:
           server_address: ${{ secrets.STALWART_SMTP_HOST }}
@@ -134,45 +215,6 @@ jobs:
             Event: ${{ github.event_name }}
             Branch: ${{ github.head_ref || github.ref_name }}
             SHA: ${{ github.sha }}
-            Conclusion: ${{ job.status }}
+            Assemble: ${{ needs.assemble-debug.result }}
+            Auto-merge: ${{ needs.auto-merge.result }}
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-      - name: Check Hephaestus webhook secrets
-        id: hephaestus
-        if: failure()
-        env:
-          HAS_URL: ${{ secrets.HEPHAESTUS_WEBHOOK_URL != '' }}
-          HAS_KEY: ${{ secrets.HEPHAESTUS_WEBHOOK_KEY != '' }}
-        run: |
-          if [ "$HAS_URL" = "true" ] && [ "$HAS_KEY" = "true" ]; then
-            echo "send=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "send=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Hephaestus webhook secrets are not set (HEPHAESTUS_WEBHOOK_URL, HEPHAESTUS_WEBHOOK_KEY). Skipping failure webhook."
-          fi
-
-      - name: Notify Hephaestus webhook on failure
-        if: failure() && steps.hephaestus.outputs.send == 'true'
-        env:
-          HEPHAESTUS_WEBHOOK_URL: ${{ secrets.HEPHAESTUS_WEBHOOK_URL }}
-          HEPHAESTUS_WEBHOOK_KEY: ${{ secrets.HEPHAESTUS_WEBHOOK_KEY }}
-          WEBHOOK_REPO: ${{ github.repository }}
-          WEBHOOK_EVENT: ${{ github.event_name }}
-          WEBHOOK_REF: ${{ github.head_ref || github.ref_name }}
-          WEBHOOK_SHA: ${{ github.sha }}
-          WEBHOOK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          WEBHOOK_WORKFLOW: ${{ github.workflow }}
-        run: |
-          python3 -c 'import json, os; print(json.dumps({
-            "source": "github-actions",
-            "repo": os.environ["WEBHOOK_REPO"],
-            "event": os.environ["WEBHOOK_EVENT"],
-            "ref": os.environ["WEBHOOK_REF"],
-            "sha": os.environ["WEBHOOK_SHA"],
-            "conclusion": "failure",
-            "run_url": os.environ["WEBHOOK_RUN_URL"],
-            "workflow": os.environ["WEBHOOK_WORKFLOW"],
-          }))' | curl -fsS -X POST "$HEPHAESTUS_WEBHOOK_URL" \
-            -H "Authorization: Bearer ${HEPHAESTUS_WEBHOOK_KEY}" \
-            -H "Content-Type: application/json" \
-            --data-binary @-
