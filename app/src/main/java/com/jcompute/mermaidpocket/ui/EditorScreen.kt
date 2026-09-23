@@ -101,6 +101,7 @@ import com.jcompute.mermaidpocket.R
 import com.jcompute.mermaidpocket.data.Appearance
 import com.jcompute.mermaidpocket.data.DiagramTheme
 import com.jcompute.mermaidpocket.data.DurableDocuments
+import com.jcompute.mermaidpocket.data.RemoteFile
 import com.jcompute.mermaidpocket.export.ExportDelivery
 import com.jcompute.mermaidpocket.export.ExportFormat
 import com.jcompute.mermaidpocket.export.ExportNames
@@ -122,14 +123,17 @@ fun MermaidAppRoot(
         if (!state.selection.active) confirmBulkDelete = false
     }
 
+    var libraryOpenRows by remember { mutableStateOf<List<RemoteFile>>(emptyList()) }
+    var showLibraryOpen by remember { mutableStateOf(false) }
+
     val openDocument = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
+        OpenDiagramContract { viewModel.suggestedDiagramFolder() },
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             val text = IncomingContent.readUri(context.contentResolver, uri)
             val name = IncomingContent.displayName(context.contentResolver, uri)
-            viewModel.openImported(text, name)
+            viewModel.openImported(text, name, underLibrary = viewModel.isLibraryDocument(uri))
         }.onFailure { error ->
             viewModel.notify(error.message ?: "Could not open that file.")
         }
@@ -198,7 +202,7 @@ fun MermaidAppRoot(
         }
     }
 
-    fun launchOpen() {
+    fun launchSafOpen() {
         openDocument.launch(
             arrayOf(
                 "text/plain",
@@ -207,6 +211,17 @@ fun MermaidAppRoot(
                 "*/*",
             ),
         )
+    }
+
+    fun launchOpen() {
+        if (state.libraryDurable) {
+            viewModel.loadLibraryOpenRows { rows ->
+                libraryOpenRows = rows
+                showLibraryOpen = true
+            }
+        } else {
+            launchSafOpen()
+        }
     }
 
     fun paste() {
@@ -397,6 +412,21 @@ fun MermaidAppRoot(
                 launchSaf(format, widthPx = null)
             },
             onDismiss = { pendingExport = null },
+        )
+    }
+
+    if (showLibraryOpen) {
+        LibraryOpenDialog(
+            files = libraryOpenRows,
+            onPick = { file ->
+                showLibraryOpen = false
+                viewModel.openLibraryTreeFile(file.name)
+            },
+            onBrowseStorage = {
+                showLibraryOpen = false
+                launchSafOpen()
+            },
+            onDismiss = { showLibraryOpen = false },
         )
     }
 

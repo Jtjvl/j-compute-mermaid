@@ -110,13 +110,13 @@ minSdk 26.
 | --- | --- |
 | **Paste** | Clipboard text → strip fences → current document → **View** |
 | **Share to MermaidPocket** | `ACTION_SEND` `text/plain` or `text/*` → same ingest → **View** |
-| **Open with** | `VIEW` / `EDIT` for text, `.mmd`, `.mermaid`, `.md` |
-| **Open…** | System picker; markdown fences stripped |
+| **Open with** | `VIEW` / `EDIT` for a `.mmd` (or sister text) **links** that file into the library so Files shows it and Save overwrites it. Plain shared text still ingests unlinked. |
+| **Open…** | In-app list of the granted diagram folder (Back returns to the app). **Browse storage…** uses the system picker. Opening a `.mmd` copies or reuses the working copy so it appears in Files. Markdown fences stripped. |
 
 ## Files
 
 - **Save** of `.mmd` writes `Documents/MermaidPocket/<name>.mmd` (and a working copy under `filesDir/diagrams/`). Preview PNGs stay in `diagrams/.thumbs/`
-- **Files** lists those files with diagram thumbnails (placeholder until a diagram has been viewed or saved). Each row shows the parsed title and the `.mmd` file name, so two diagrams can share a title
+- **Files** lists every `.mmd` under the granted library tree, including nested folders (working copies stay flat; colliding basenames get a folder prefix). Each row shows the parsed title and the `.mmd` file name, so two diagrams can share a title. Opening a listed row sets the chrome filename and parsed title to that row.
 - Long-press a row to multi-select and bulk-delete; swipe deletes one file; the share icon sends that `.mmd`
 - Unsaved paste/share stays in memory until you save
 

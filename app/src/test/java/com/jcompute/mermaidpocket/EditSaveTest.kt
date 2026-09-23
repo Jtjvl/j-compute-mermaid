@@ -5,6 +5,7 @@ import com.jcompute.mermaidpocket.data.DiagramSync
 import com.jcompute.mermaidpocket.ui.EditSaveChrome
 import com.jcompute.mermaidpocket.ui.EditorLink
 import com.jcompute.mermaidpocket.ui.EditorMode
+import com.jcompute.mermaidpocket.ui.EditorUiState
 import com.jcompute.mermaidpocket.ui.LibrarySave
 import com.jcompute.mermaidpocket.ui.Screen
 import java.io.File
@@ -163,7 +164,7 @@ class EditSaveTest {
         assertTrue(blank.contains("currentFile = null"))
         assertTrue(blank.contains("source = \"\""))
         assertTrue(blank.contains("mode = EditorMode.Edit"))
-        val save = model.substringAfter("fun save()").substringBefore("fun dismissFolderPrompt")
+        val save = model.substringAfter("fun save()").substringBefore("fun suggestedDiagramFolder")
         assertTrue(save.contains("LibrarySave.commit"))
         assertTrue(save.contains("currentFile = snapshot.currentFile"))
         assertTrue(save.contains("currentFile = result.file"))
@@ -203,19 +204,78 @@ class EditSaveTest {
     }
 
     @Test
+    fun openExternalLinksAndSaveOverwritesThatFile() {
+        val source = "%% Checkout\nflowchart TD\n  A-->B"
+        val written = sync.linkOpened("order-flow.mmd", source)
+        val link = EditorLink.stored(written.file, source)
+        assertEquals("order-flow.mmd", link.currentFile!!.name)
+        assertEquals("Checkout", link.title)
+        assertFalse(link.isDirty)
+        val listed = sync.list().single()
+        assertEquals(listed.name, link.currentFile!!.name)
+        assertEquals(listed.title, link.title)
+
+        val saved = LibrarySave.commit(
+            sync = sync,
+            currentFile = link.currentFile,
+            title = link.title,
+            source = "%% Checkout\nflowchart TD\n  A-->C",
+        )
+        assertEquals(written.file.canonicalPath, saved.file.canonicalPath)
+        assertEquals("%% Checkout\nflowchart TD\n  A-->C", written.file.readText())
+        assertEquals(1, store.list().size)
+    }
+
+    @Test
+    fun openStoredSetsTitleAndFileNameToMatchFiles() {
+        val source = "%% Checkout\nflowchart TD\n  A-->B"
+        val file = sync.write(sync.uniqueFile("order-flow"), source).file
+        val listed = sync.list().single()
+        val link = EditorLink.stored(file, sync.read(file))
+        val state = EditorUiState(
+            currentFile = link.currentFile,
+            source = link.source,
+            savedSource = link.savedSource,
+            title = link.title,
+        )
+        assertEquals(listed.title, state.title)
+        assertEquals(listed.name, state.fileName)
+        assertEquals("Checkout", state.title)
+        assertEquals("order-flow.mmd", state.fileName)
+        assertTrue(state.fileName.endsWith(".mmd"))
+        assertFalse(state.fileName.equals("Untitled.mmd", ignoreCase = true))
+        assertFalse(state.title.equals("Untitled", ignoreCase = true))
+    }
+
+    @Test
+    fun openOfAnAlreadyListedFileReusesItInsteadOfCreatingAnother() {
+        val source = "flowchart TD\n  A-->B"
+        val existing = sync.write(sync.uniqueFile("kept"), source).file
+        val linked = sync.linkOpened("kept.mmd", source, underLibrary = true)
+        assertEquals(existing.canonicalPath, linked.file.canonicalPath)
+        assertEquals(1, store.list().size)
+        val again = LibrarySave.commit(sync, linked.file, "kept", "flowchart TD\n  A-->C")
+        assertEquals(existing.canonicalPath, again.file.canonicalPath)
+        assertEquals("flowchart TD\n  A-->C", existing.readText())
+    }
+
+    @Test
     fun ingestAndOpenImportedUnlinkThePreviousFile() {
         val model = source("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorViewModel.kt")
         val ingest = model.substringAfter("fun ingest(").substringBefore("fun pasteFromClipboard")
         assertTrue(ingest.contains("EditorLink.imported"))
-        assertTrue(ingest.contains("currentFile = link.currentFile"))
-        assertTrue(ingest.contains("savedSource = link.savedSource"))
-        val openImported = model.substringAfter("fun openImported").substringBefore("fun enterSelection")
-        assertTrue(openImported.contains("ingest("))
+        assertTrue(ingest.contains("applyLink"))
+        assertFalse(ingest.contains("linkOpened"))
+        val openImported = model.substringAfter("fun openImported").substringBefore("fun loadLibraryOpenRows")
+        assertTrue(openImported.contains("linkOpened"))
+        assertTrue(openImported.contains("EditorLink.stored"))
+        assertFalse(openImported.contains("ingest("))
         val intent = model.substringAfter("fun handleIntent").substringBefore("fun openStored")
+        assertTrue(intent.contains("openImported"))
         assertTrue(intent.contains("ingest("))
         val openStored = model.substringAfter("fun openStored").substringBefore("fun openImported")
         assertTrue(openStored.contains("EditorLink.stored"))
-        assertTrue(openStored.contains("currentFile = link.currentFile"))
+        assertTrue(openStored.contains("applyLink"))
         assertFalse(openStored.contains("currentFile = null"))
     }
 
@@ -234,6 +294,9 @@ class EditSaveTest {
         assertEquals(1, Regex("""Text\("Save"\)""").findAll(overflow).count())
         assertTrue(screen.contains("showDocumentActions = true"))
         assertTrue(screen.contains("onOpen = ::launchOpen"))
+        assertTrue(screen.contains("LibraryOpenDialog"))
+        assertTrue(screen.contains("launchSafOpen"))
+        assertTrue(screen.contains("OpenDiagramContract"))
 
         val files = source("app/src/main/java/com/jcompute/mermaidpocket/ui/FilesPane.kt")
         assertTrue(files.contains("key = { it.file.absolutePath }"))

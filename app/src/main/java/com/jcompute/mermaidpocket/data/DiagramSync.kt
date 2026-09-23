@@ -43,7 +43,11 @@ object DiagramSyncPlan {
     }
 }
 
-data class RemoteFile(val name: String, val modifiedAt: Long)
+data class RemoteFile(
+    val name: String,
+    val modifiedAt: Long,
+    val relativePath: String = name,
+)
 
 /** Folder of `.mmd` files outside app-private storage. */
 interface RemoteDiagrams {
@@ -75,6 +79,50 @@ class DiagramSync(
     fun writeThumbnail(diagram: java.io.File, png: ByteArray) = local.writeThumbnail(diagram, png)
 
     fun uniqueFile(slug: String) = local.uniqueFile(slug)
+
+    fun remoteList(): List<RemoteFile> = remoteProvider()?.list().orEmpty()
+
+    fun readRemote(name: String): String? {
+        return runCatching { remoteProvider()?.read(name) }.getOrNull()
+    }
+
+    /**
+     * Copy or reuse a working copy so Open / Open-with can link [currentFile].
+     * A library descendant is registered under its existing name. A file from
+     * elsewhere that collides with a different diagram gets a new unique name.
+     */
+    fun linkOpened(
+        fileName: String?,
+        source: String,
+        underLibrary: Boolean = false,
+    ): LocalWrite {
+        val listed = local.list()
+        val names = listed.map { it.name }.toSet()
+        val resolved = LibraryOpen.resolveName(
+            fileName = fileName,
+            source = source,
+            existingNames = names,
+            existingText = { candidate ->
+                listed.firstOrNull { it.name.equals(candidate, ignoreCase = true) }
+                    ?.let { runCatching { local.read(it.file) }.getOrNull() }
+            },
+            underLibrary = underLibrary,
+        )
+        val existing = listed.firstOrNull { it.name.equals(resolved, ignoreCase = true) }
+        if (existing != null) {
+            return LocalWrite(existing.file, mirrored = remoteProvider() != null)
+        }
+        val imported = local.importFile(resolved, source, System.currentTimeMillis())
+        val remote = remoteProvider() ?: return LocalWrite(imported, mirrored = false)
+        val alreadyRemote = remote.list().any { it.name.equals(imported.name, ignoreCase = true) }
+        if (alreadyRemote) return LocalWrite(imported, mirrored = true)
+        return try {
+            remote.write(imported.name, source, imported.lastModified())
+            LocalWrite(imported, mirrored = true)
+        } catch (_: Exception) {
+            LocalWrite(imported, mirrored = false)
+        }
+    }
 
     fun write(file: java.io.File, source: String): LocalWrite {
         val written = local.write(file, source)

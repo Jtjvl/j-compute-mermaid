@@ -1,6 +1,8 @@
 package com.jcompute.mermaidpocket
 
 import com.jcompute.mermaidpocket.data.LibraryChild
+import com.jcompute.mermaidpocket.data.LibraryListing
+import com.jcompute.mermaidpocket.data.LibraryNode
 import com.jcompute.mermaidpocket.data.LibraryRoot
 import com.jcompute.mermaidpocket.data.LibraryRootChoice
 import java.io.File
@@ -52,6 +54,34 @@ class LibraryRootTest {
             LibraryRootChoice.CreateChild,
             LibraryRoot.choose("Notes", listOf(LibraryChild("not-a-file.mmd", directory = true))),
         )
+    }
+
+    @Test
+    fun nestedMmdOutsidePocketUsesThePickedFolder() {
+        val children = listOf(
+            LibraryChild("MermaidPocket", directory = true),
+            LibraryChild("projects", directory = true),
+        )
+        assertEquals(
+            LibraryRootChoice.ExistingChild,
+            LibraryRoot.choose("Documents", children, nestedMmdOutsidePocket = false),
+        )
+        assertEquals(
+            LibraryRootChoice.Picked,
+            LibraryRoot.choose("Documents", children, nestedMmdOutsidePocket = true),
+        )
+        val tree = listOf(
+            LibraryNode("MermaidPocket", directory = true, children = listOf(
+                LibraryNode("kept.mmd", directory = false),
+            )),
+            LibraryNode("projects", directory = true, children = listOf(
+                LibraryNode("one.mmd", directory = false),
+                LibraryNode("nested", directory = true, children = listOf(
+                    LibraryNode("two.mmd", directory = false),
+                )),
+            )),
+        )
+        assertTrue(LibraryListing.hasMmdOutsidePocket(tree))
     }
 
     @Test

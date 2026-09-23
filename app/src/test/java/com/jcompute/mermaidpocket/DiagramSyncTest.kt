@@ -228,6 +228,44 @@ class DiagramSyncTest {
     }
 
     @Test
+    fun reconcilePullsSevenFilesWithMixedNestingNames() {
+        val paths = listOf(
+            "one.mmd",
+            "two.mmd",
+            "three.mmd",
+            "four.mmd",
+            "five.mmd",
+            "six.mmd",
+            "seven.mmd",
+        )
+        paths.forEachIndexed { index, name ->
+            remote.write(name, "%% $name\nflowchart TD\n  A-->B", modifiedAt = (index + 1) * 10L)
+        }
+        val sync = sync()
+        val report = sync.reconcile()
+        assertEquals(7, report.pulled)
+        assertEquals(0, report.pushed)
+        assertEquals(paths.toSet(), sync.list().map { it.name }.toSet())
+        assertEquals(7, sync.list().map { it.file.canonicalPath }.distinct().size)
+    }
+
+    @Test
+    fun linkOpenedCopiesAMissingFileAndSaveOverwritesIt() {
+        val sync = sync()
+        val source = "%% External\nflowchart TD\n  A-->B"
+        val linked = sync.linkOpened("external.mmd", source)
+        assertEquals("external.mmd", linked.file.name)
+        assertEquals(source, sync.read(linked.file))
+        assertEquals(setOf("external.mmd"), remote.files.keys)
+        assertEquals(listOf("external.mmd"), sync.list().map { it.name })
+
+        val again = sync.write(linked.file, "%% External\nflowchart TD\n  A-->C")
+        assertEquals(linked.file.canonicalPath, again.file.canonicalPath)
+        assertEquals("%% External\nflowchart TD\n  A-->C", remote.files.getValue("external.mmd").first)
+        assertEquals(1, sync.list().size)
+    }
+
+    @Test
     fun reconcilePullsEveryRemoteFileWhenTitlesMatch() {
         val shared = "%% Quarterly\nflowchart TD\n  A-->B"
         listOf("q1.mmd", "q2.mmd", "q3.mmd", "q4.mmd").forEachIndexed { index, name ->

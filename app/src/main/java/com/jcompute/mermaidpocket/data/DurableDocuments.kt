@@ -14,8 +14,9 @@ import androidx.documentfile.provider.DocumentFile
  * folder the user grants are not. The canonical place is [DISPLAY_PATH]:
  * pick `Documents` and this class uses (or creates) the `MermaidPocket` child,
  * or pick that folder directly. A picked folder that already has `.mmd` files
- * at its root is the library itself — those files are not skipped in favor of
- * a nested `MermaidPocket` directory.
+ * at its root — or nested outside a leftover `MermaidPocket` child — is the
+ * library itself. [DocumentRemote] lists every `.mmd` under that tree, not
+ * only direct children.
  *
  * The grant itself does not survive uninstall. After reinstall, choose the
  * same folder and [DiagramSync.reconcile] copies the `.mmd` files back.
@@ -85,6 +86,7 @@ class DurableDocuments(
                 val name = doc.name ?: return@mapNotNull null
                 LibraryChild(name = name, directory = doc.isDirectory)
             },
+            nestedMmdOutsidePocket = hasMmdOutsidePocket(children),
         )
         return when (choice) {
             LibraryRootChoice.Picked -> picked
@@ -95,15 +97,47 @@ class DurableDocuments(
         }
     }
 
+    /**
+     * True when a subdirectory other than MermaidPocket already holds `.mmd`
+     * files. Bounded so granting `Documents` does not walk the whole tree.
+     */
+    private fun hasMmdOutsidePocket(children: List<DocumentFile>): Boolean {
+        var visits = 0
+        fun walk(dir: DocumentFile, depth: Int): Boolean {
+            if (depth > 6 || visits > 250) return false
+            visits++
+            for (doc in dir.listFiles()) {
+                val name = doc.name ?: continue
+                if (name.startsWith(".")) continue
+                if (doc.isFile && LibraryListing.isDiagramFileName(name)) return true
+                if (doc.isDirectory && walk(doc, depth + 1)) return true
+            }
+            return false
+        }
+        return children.any { doc ->
+            doc.isDirectory &&
+                !doc.name.equals(FOLDER_NAME, ignoreCase = true) &&
+                walk(doc, 1)
+        }
+    }
+
+    fun isLibraryDocument(uri: Uri): Boolean {
+        val library = libraryDocumentId() ?: return false
+        val document = documentId(uri) ?: return false
+        return LibraryMembership.relativePath(library, document) != null
+    }
+
     private class DocumentRemote(
         private val context: Context,
         private val root: DocumentFile,
     ) : RemoteDiagrams {
         override fun list(): List<RemoteFile> {
-            return root.listFiles().mapNotNull { doc ->
-                val name = doc.name ?: return@mapNotNull null
-                if (!doc.isFile || !name.endsWith(".mmd", ignoreCase = true)) return@mapNotNull null
-                RemoteFile(name, doc.lastModified())
+            return catalog().map { (storeName, found) ->
+                RemoteFile(
+                    name = storeName,
+                    modifiedAt = found.doc.lastModified(),
+                    relativePath = found.relativePath,
+                )
             }
         }
 
@@ -135,7 +169,37 @@ class DurableDocuments(
         }
 
         private fun find(name: String): DocumentFile? {
-            return root.listFiles().firstOrNull { it.isFile && it.name == name }
+            return catalog()[name]?.doc
+        }
+
+        private data class Found(val relativePath: String, val doc: DocumentFile)
+
+        /**
+         * Every `.mmd` under [root], keyed by the flat working-copy name.
+         * Nested files stay in place; only the list identity is flattened.
+         */
+        private fun catalog(): Map<String, Found> {
+            val found = mutableListOf<Found>()
+            collect(root, prefix = "", into = found)
+            val names = LibraryListing.storeNames(found.map { it.relativePath })
+            return found.associate { entry ->
+                val storeName = names.getValue(entry.relativePath)
+                storeName to entry
+            }
+        }
+
+        private fun collect(dir: DocumentFile, prefix: String, into: MutableList<Found>) {
+            for (doc in dir.listFiles()) {
+                val name = doc.name ?: continue
+                if (name.startsWith(".")) continue
+                if (doc.isDirectory) {
+                    val childPrefix = if (prefix.isEmpty()) name else "$prefix/$name"
+                    collect(doc, childPrefix, into)
+                } else if (doc.isFile && LibraryListing.isDiagramFileName(name)) {
+                    val relative = if (prefix.isEmpty()) name else "$prefix/$name"
+                    into.add(Found(relative, doc))
+                }
+            }
         }
     }
 

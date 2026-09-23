@@ -74,6 +74,30 @@ class LibraryMembershipTest {
     }
 
     @Test
+    fun nestedLibraryMmdIsIndexedAsADescendant() {
+        assertEquals(
+            "nested-flow.mmd",
+            LibraryMembership.descendantName(library, "$library/nested/flow.mmd", emptySet()),
+        )
+        assertEquals(
+            "flow.mmd",
+            LibraryMembership.descendantName(library, "$library/nested/flow.mmd", setOf("flow.mmd")),
+        )
+        assertEquals(
+            "nested-flow.mmd",
+            LibraryMembership.nameToIndex(
+                libraryDocumentId = library,
+                documentId = "$library/nested/flow.mmd",
+                displayName = "flow.mmd",
+                libraryNames = emptySet(),
+                writtenText = "flowchart TD\n  A-->B",
+                libraryText = { null },
+            ),
+        )
+        assertNull(LibraryMembership.relativePath(library, "primary:Documents/MermaidPocketBackup/flow.mmd"))
+    }
+
+    @Test
     fun pathMatchWinsEvenWhenTheNameIsNotListedYet() {
         assertEquals(
             "fresh.mmd",
