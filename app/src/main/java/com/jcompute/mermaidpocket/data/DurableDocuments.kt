@@ -26,6 +26,16 @@ class DurableDocuments(
 
     fun isReady(): Boolean = libraryRoot() != null
 
+    /** Document id of the granted MermaidPocket folder, or null when no folder is attached. */
+    fun libraryDocumentId(): String? {
+        val root = libraryRoot() ?: return null
+        return documentId(root.uri)
+    }
+
+    fun documentId(uri: Uri): String? {
+        return runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+    }
+
     fun remote(): RemoteDiagrams? {
         val root = libraryRoot() ?: return null
         return DocumentRemote(appContext, root)
