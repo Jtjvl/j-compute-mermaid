@@ -13,7 +13,9 @@ import androidx.documentfile.provider.DocumentFile
  * App-private `filesDir` is deleted on uninstall. Files written through a
  * folder the user grants are not. The canonical place is [DISPLAY_PATH]:
  * pick `Documents` and this class uses (or creates) the `MermaidPocket` child,
- * or pick that folder directly.
+ * or pick that folder directly. A picked folder that already has `.mmd` files
+ * at its root is the library itself — those files are not skipped in favor of
+ * a nested `MermaidPocket` directory.
  *
  * The grant itself does not survive uninstall. After reinstall, choose the
  * same folder and [DiagramSync.reconcile] copies the `.mmd` files back.
@@ -76,11 +78,21 @@ class DurableDocuments(
         val tree = persistedTreeUri() ?: return null
         val picked = DocumentFile.fromTreeUri(appContext, tree) ?: return null
         if (!picked.isDirectory) return null
-        if (picked.name.equals(FOLDER_NAME, ignoreCase = true)) return picked
-        val existing = picked.listFiles().firstOrNull { doc ->
-            doc.isDirectory && doc.name.equals(FOLDER_NAME, ignoreCase = true)
+        val children = picked.listFiles()?.toList().orEmpty()
+        val choice = LibraryRoot.choose(
+            pickedName = picked.name,
+            children = children.mapNotNull { doc ->
+                val name = doc.name ?: return@mapNotNull null
+                LibraryChild(name = name, directory = doc.isDirectory)
+            },
+        )
+        return when (choice) {
+            LibraryRootChoice.Picked -> picked
+            LibraryRootChoice.ExistingChild -> children.firstOrNull { doc ->
+                doc.isDirectory && doc.name.equals(FOLDER_NAME, ignoreCase = true)
+            }
+            LibraryRootChoice.CreateChild -> picked.createDirectory(FOLDER_NAME)
         }
-        return existing ?: picked.createDirectory(FOLDER_NAME)
     }
 
     private class DocumentRemote(
@@ -128,7 +140,7 @@ class DurableDocuments(
     }
 
     companion object {
-        const val FOLDER_NAME = "MermaidPocket"
+        const val FOLDER_NAME = LibraryRoot.FOLDER_NAME
         const val DISPLAY_PATH = "Documents/MermaidPocket"
         private const val MIME = "text/plain"
         private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"

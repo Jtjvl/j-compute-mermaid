@@ -7,6 +7,8 @@ data class StoredDiagram(
     val name: String,
     val updatedAtMillis: Long,
     val thumbnail: File? = null,
+    /** Parsed diagram title. List identity is [file], never this string. */
+    val title: String = name,
 )
 
 /**
@@ -24,15 +26,18 @@ class DiagramStore(private val filesDir: File) {
     fun list(): List<StoredDiagram> {
         dir.mkdirs()
         thumbsDir.mkdirs()
+        // One row per file path. Do not collapse diagrams that share a title.
         return dir.listFiles { file -> file.isFile && file.name.endsWith(".mmd", ignoreCase = true) }
             .orEmpty()
             .map { file ->
                 val thumb = thumbnailFile(file)
+                val text = runCatching { read(file) }.getOrDefault("")
                 StoredDiagram(
                     file = file,
                     name = file.name,
                     updatedAtMillis = file.lastModified(),
                     thumbnail = thumb.takeIf { it.isFile && it.length() > 0L },
+                    title = TitleParser.fromSource(text, fileName = file.name, fallback = file.name),
                 )
             }
             .sortedByDescending { it.updatedAtMillis }
