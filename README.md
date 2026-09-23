@@ -84,7 +84,7 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
 - Release APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
 
-Debug APK CI runs on GitHub Actions after Origin→GitHub sync. Push to `main` and manual runs upload `app-debug` for two days so Zeus can publish it on downloads.j-compute.com. Pull requests assemble and do not upload. A failed run mails ops-alert@j-compute.com from alerts@j-compute.com over SMTPS, then POSTs to the Hephaestus webhook (`Authorization: Bearer`). See [`docs/ci.md`](docs/ci.md).
+Debug APK CI is GitHub Actions only. A green, non-draft same-repo pull request to `main` merges itself. Push to `main` uploads `app-debug` for two days, and creates tag `vMAJOR.MINOR.PATCH` plus a GitHub Release with the APK when `versionName` is a new cut. A failed run mails ops-alert@j-compute.com from alerts@j-compute.com over SMTPS. See [`docs/ci.md`](docs/ci.md).
 
 `assembleRelease` is unsigned and is not run through R8 (`isMinifyEnabled` is false). Do not add a keystore to the repo. For a closer bit-match, build with JDK 17 and `SOURCE_DATE_EPOCH` set to the commit time. There is no native code. `mermaid.min.js` is a vendored asset.
 
