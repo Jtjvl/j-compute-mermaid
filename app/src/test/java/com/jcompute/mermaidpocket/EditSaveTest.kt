@@ -79,9 +79,9 @@ class EditSaveTest {
             title = "Untitled",
             source = "fresh",
         )
-        assertEquals("untitled.mmd", existing.name)
+        assertEquals("untitled.mmd", existing.file.name)
         assertEquals("untitled-1.mmd", written.file.name)
-        assertEquals("keep me", existing.readText())
+        assertEquals("keep me", existing.file.readText())
         assertEquals("fresh", written.file.readText())
     }
 
