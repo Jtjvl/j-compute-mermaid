@@ -40,9 +40,13 @@ class RenderPassTest {
     @Test
     fun ingestAndOpenBumpEpochInViewModel() {
         val kt = sourceFile("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorViewModel.kt")
-        assertTrue(kt.contains("RenderPass.next(it.renderEpoch, source)"))
+        assertTrue(
+            kt.contains("RenderPass.next(it.renderEpoch, source)") ||
+                kt.contains("RenderPass.next(it.renderEpoch, link.source)"),
+        )
         assertTrue(kt.contains("renderEpoch = pass.epoch"))
         assertTrue(kt.contains("isRendering = pass.showSpinner"))
+        assertTrue(kt.contains("applyLink"))
     }
 
     private fun sourceFile(relative: String): String {
