@@ -1,11 +1,13 @@
 # Happy path is GitHub-only (no Zeus publish, no Hephaestus tag/webhook):
 #
-# pull_request → main (same repo, not draft): assemble, then merge.
-# push → main: assemble, upload app-debug, create vMAJOR.MINOR.PATCH from
-#   versionName when that tag is missing, and attach the APK to the GitHub Release.
-# workflow_dispatch: assemble and upload app-debug (no merge, no tag).
+# pull_request → main (same repo, not draft): assemble, merge, then SemVer
+#   tag/release. GITHUB_TOKEN merges do not start a push workflow, so the
+#   PR job publishes after merge.
+# push → main or workflow_dispatch on main: assemble, upload app-debug,
+#   create vMAJOR.MINOR.PATCH from versionName when that tag is new.
 #
-# Pull requests do not upload artifacts. Push/dispatch artifacts stay 2 days.
+# Pull-request artifacts are a 1-day handoff for the merge job. Push and
+# dispatch keep app-debug for 2 days.
 #
 # Failures mail ops-alert. Empty SMTP secrets warn and skip; that skip does
 # not fail the job.
@@ -57,47 +59,23 @@ jobs:
         run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload debug APK
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 2
+          retention-days: ${{ github.event_name == 'pull_request' && 1 || 2 }}
 
       - name: Tag SemVer and publish GitHub Release
         id: semver
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          eval "$(python3 scripts/ci/semver_release.py env)"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
-            echo "Tag ${TAG} already exists; skipping (versionName was not a new cut)."
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "MermaidPocket ${VERSION}"
-          git push origin "${TAG}"
-          NOTES="$(python3 scripts/ci/semver_release.py notes)"
-          ASSET="MermaidPocket-${VERSION}-debug.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "${ASSET}"
-          gh release create "${TAG}" "${ASSET}" \
-            --title "${TAG}" \
-            --notes "${NOTES}" \
-            --target "${GITHUB_SHA}"
-          echo "created=true" >> "$GITHUB_OUTPUT"
+        run: bash scripts/ci/publish_semver.sh "${GITHUB_SHA}" app/build/outputs/apk/debug/app-debug.apk
 
       - name: Job summary
         if: success()
         env:
-          UPLOAD_ARTIFACT: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
           TAG_CREATED: ${{ steps.semver.outputs.created }}
           TAG_NAME: ${{ steps.semver.outputs.tag }}
         run: |
@@ -110,10 +88,10 @@ jobs:
             echo ""
             echo "| Property | Value |"
             echo "| --- | --- |"
-            if [ "$UPLOAD_ARTIFACT" = "true" ]; then
-              echo "| Artifact | \`app-debug\` (retained 2 days) |"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "| Artifact | \`app-debug\` (1-day merge handoff) |"
             else
-              echo "| Artifact | not uploaded (pull request gate) |"
+              echo "| Artifact | \`app-debug\` (retained 2 days) |"
             fi
             if [ "${TAG_CREATED}" = "true" ]; then
               echo "| Release | tagged and published \`${TAG_NAME}\` |"
@@ -136,6 +114,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,6 +122,7 @@ jobs:
           fetch-depth: 0
 
       - name: Merge pull request
+        id: merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -151,37 +131,54 @@ jobs:
           HEAD_LABEL: ${{ github.event.pull_request.head.label }}
         run: |
           set -euo pipefail
-          CURRENT="$(gh pr view "$PR" --repo "$GH_REPO" --json headRefOid,isDraft,mergeable,state --jq '{head:.headRefOid,draft:.isDraft,mergeable:.mergeable,state:.state}')"
+          CURRENT="$(gh pr view "$PR" --repo "$GH_REPO" --json headRefOid,isDraft,mergeable,state,mergeCommit --jq '{head:.headRefOid,draft:.isDraft,mergeable:.mergeable,state:.state,merge:.mergeCommit.oid}')"
           HEAD="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["head"])')"
           DRAFT="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["draft"])')"
           STATE="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
           MERGEABLE="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mergeable"])')"
+          EXISTING_MERGE="$(printf '%s' "$CURRENT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("merge") or "")')"
+          echo "published=false" >> "$GITHUB_OUTPUT"
           if [ "$STATE" = "MERGED" ]; then
             echo "PR #${PR} is already merged."
+            echo "merge_sha=${EXISTING_MERGE}" >> "$GITHUB_OUTPUT"
+            echo "did_merge=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$DRAFT" = "True" ]; then
             echo "PR #${PR} is draft; skip merge."
+            echo "did_merge=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$HEAD" != "$TESTED_HEAD" ]; then
             echo "PR head moved (${HEAD} != ${TESTED_HEAD}); not merging a stale green."
+            echo "did_merge=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$MERGEABLE" = "CONFLICTING" ]; then
             echo "::error::PR #${PR} has conflicts."
             exit 1
           fi
-          # REST merge does not need a local checkout; sha pins the tested head.
-          if gh api --method PUT "repos/${GH_REPO}/pulls/${PR}/merge" \
+          RESP="$(gh api --method PUT "repos/${GH_REPO}/pulls/${PR}/merge" \
             -f merge_method=merge \
             -f sha="${TESTED_HEAD}" \
-            -f commit_title="Merge pull request #${PR} from ${HEAD_LABEL}"; then
-            echo "Merged PR #${PR}."
-            exit 0
-          fi
-          echo "Direct merge blocked (checks may still be required). Enabling auto-merge."
-          gh pr merge "$PR" --repo "$GH_REPO" --merge --auto
+            -f commit_title="Merge pull request #${PR} from ${HEAD_LABEL}")"
+          MERGE_SHA="$(printf '%s' "$RESP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          echo "Merged PR #${PR} at ${MERGE_SHA}."
+          echo "merge_sha=${MERGE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "did_merge=true" >> "$GITHUB_OUTPUT"
+
+      - name: Download debug APK
+        if: steps.merge.outputs.did_merge == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: app-debug
+          path: apk
+
+      - name: Tag SemVer after GITHUB_TOKEN merge
+        if: steps.merge.outputs.did_merge == 'true' && steps.merge.outputs.merge_sha != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/ci/publish_semver.sh "${{ steps.merge.outputs.merge_sha }}" apk/app-debug.apk
 
   alert-on-failure:
     name: Alert on failure

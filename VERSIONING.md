@@ -18,4 +18,4 @@ Increment `versionCode` on every APK users are expected to install, including wh
 
 Merge CI publishes the debug APK on the SemVer GitHub Release. SemVer is how Play, F-Droid, and sideload builds tell users what changed.
 
-Older tags `v0.1.0-debug` and `v0.1.1-debug` were early sideload cuts. New tags drop the `-debug` suffix (`v0.2.0`, not `v0.2.0-debug`). The release pull request does not create the tag; push CI on `main` does after a green assemble.
+Older tags `v0.1.0-debug` and `v0.1.1-debug` were early sideload cuts. New tags drop the `-debug` suffix (`v0.2.0`, not `v0.2.0-debug`). The release pull request does not create the tag. After a green assemble, merge CI tags: the pull-request job does it after auto-merge (`GITHUB_TOKEN` merges do not start a `push` workflow), and `push` / `workflow_dispatch` on `main` do it when a human merge does start that workflow.
