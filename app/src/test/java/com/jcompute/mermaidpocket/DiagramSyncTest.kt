@@ -113,6 +113,121 @@ class DiagramSyncTest {
     }
 
     @Test
+    fun saveACopyInsideTheLibraryIsListedWithoutReconcile() {
+        val sync = sync()
+        val original = sync.write(sync.uniqueFile("flow"), "flowchart TD\n  A-->B")
+        original.file.setLastModified(1_000L)
+        val source = "flowchart TD\n  A-->C"
+        remote.write("flow-copy.mmd", source, modifiedAt = 2_000L)
+
+        val indexed = sync.upsertSavedCopy(
+            libraryDocumentId = "primary:Documents/MermaidPocket",
+            documentId = "primary:Documents/MermaidPocket/flow-copy.mmd",
+            displayName = "flow-copy.mmd",
+            source = source,
+        )
+
+        assertTrue(indexed)
+        assertEquals(listOf("flow-copy.mmd", "flow.mmd"), sync.list().map { it.name })
+        assertEquals(source, sync.read(sync.list().first { it.name == "flow-copy.mmd" }.file))
+        assertEquals(setOf("flow.mmd", "flow-copy.mmd"), remote.files.keys)
+        assertEquals(2_000L, remote.files.getValue("flow-copy.mmd").second)
+        assertEquals(0, sync.reconcile().copied)
+    }
+
+    @Test
+    fun saveACopyOutsideTheLibraryIsNotListed() {
+        val sync = sync()
+        sync.write(sync.uniqueFile("flow"), "flowchart TD\n  A-->B")
+
+        val indexed = sync.upsertSavedCopy(
+            libraryDocumentId = "primary:Documents/MermaidPocket",
+            documentId = "primary:Download/flow-copy.mmd",
+            displayName = "flow-copy.mmd",
+            source = "flowchart TD\n  A-->C",
+        )
+
+        assertFalse(indexed)
+        assertEquals(listOf("flow.mmd"), sync.list().map { it.name })
+        assertEquals(setOf("flow.mmd"), remote.files.keys)
+    }
+
+    @Test
+    fun saveACopyMatchesAListedLibraryFileWhenTheDocumentIdIsOpaque() {
+        val source = "flowchart TD\n  A-->C"
+        remote.write("flow-copy.mmd", source, modifiedAt = 2_000L)
+        val sync = sync()
+
+        val indexed = sync.upsertSavedCopy(
+            libraryDocumentId = "primary:Documents/MermaidPocket",
+            documentId = "msf:100",
+            displayName = "flow-copy.mmd",
+            source = source,
+        )
+
+        assertTrue(indexed)
+        assertEquals(listOf("flow-copy.mmd"), sync.list().map { it.name })
+        assertEquals(source, remote.read("flow-copy.mmd"))
+        assertEquals(2_000L, remote.files.getValue("flow-copy.mmd").second)
+    }
+
+    @Test
+    fun opaqueSaveDoesNotReplaceADifferentLibraryFile() {
+        remote.write("flow.mmd", "original", modifiedAt = 2_000L)
+        val sync = sync()
+        sync.reconcile()
+
+        val indexed = sync.upsertSavedCopy(
+            libraryDocumentId = "primary:Documents/MermaidPocket",
+            documentId = "msf:100",
+            displayName = "flow.mmd",
+            source = "exported elsewhere",
+        )
+
+        assertFalse(indexed)
+        assertEquals("original", remote.read("flow.mmd"))
+        assertEquals("original", sync.read(sync.list().single().file))
+        assertEquals(2_000L, remote.files.getValue("flow.mmd").second)
+    }
+
+    @Test
+    fun saveACopyOverALibraryNameUpdatesTheListedFile() {
+        val sync = sync()
+        sync.write(sync.uniqueFile("flow"), "old")
+        remote.write("flow.mmd", "stale-on-disk", modifiedAt = 2_000L)
+
+        val indexed = sync.upsertSavedCopy(
+            libraryDocumentId = "primary:Documents/MermaidPocket",
+            documentId = "primary:Documents/MermaidPocket/flow.mmd",
+            displayName = "flow.mmd",
+            source = "exported",
+        )
+
+        assertTrue(indexed)
+        assertEquals(listOf("flow.mmd"), sync.list().map { it.name })
+        assertEquals("exported", sync.read(sync.list().single().file))
+        assertEquals("exported", remote.read("flow.mmd"))
+    }
+
+    @Test
+    fun pathMatchIndexesANewLibraryNameWithoutCreatingASecondRemoteFile() {
+        val sync = sync()
+        val source = "flowchart TD\n  A-->B"
+
+        val indexed = sync.upsertSavedCopy(
+            libraryDocumentId = "primary:Documents/MermaidPocket",
+            documentId = "primary:Documents/MermaidPocket/copy.mmd",
+            displayName = "copy.mmd",
+            source = source,
+        )
+
+        assertTrue(indexed)
+        assertEquals(listOf("copy.mmd"), sync.list().map { it.name })
+        assertEquals(source, sync.read(sync.list().single().file))
+        assertTrue(remote.files.isEmpty())
+    }
+
+    @Test
     fun readmeNamesTheDurablePath() {
         val readme = source("README.md")
         assertTrue(readme.contains("Documents/MermaidPocket"))
