@@ -5,15 +5,16 @@
 # Artifact retention is 2 days. Zeus copies the artifact to downloads within
 # minutes; Actions storage is only a handoff buffer.
 #
-# On failure (pull request, push, and workflow_dispatch), mail ops-alert@j-compute.com.
-# SMTP is read from Actions secrets. Zeus is provisioning the server;
-# Hephaestus adds these when ready:
-#   OPS_ALERT_SMTP_SERVER
-#   OPS_ALERT_SMTP_PORT
-#   OPS_ALERT_SMTP_USER
-#   OPS_ALERT_SMTP_PASSWORD
-#   OPS_ALERT_FROM  (optional; default From is ops-alert@j-compute.com)
-# If the required secrets are missing, the notify step warns and skips the send.
+# On failure (pull request, push, and workflow_dispatch), mail ops-alert.
+# Zeus provisioned Stalwart and set these Actions secrets:
+#   STALWART_SMTP_HOST
+#   STALWART_SMTP_PORT   (465, SMTPS — implicit TLS; the step sets secure: true)
+#   STALWART_SMTP_USER   (alerts@j-compute.com)
+#   STALWART_SMTP_PASSWORD
+#   STALWART_SMTP_FROM   (alerts@j-compute.com)
+#   OPS_ALERT_TO         (ops-alert@j-compute.com)
+# From is STALWART_SMTP_FROM. To is OPS_ALERT_TO.
+# If any of those secrets is empty, the notify step warns and skips the send.
 
 name: Android Debug APK
 
@@ -88,28 +89,31 @@ jobs:
         id: ops-alert
         if: failure()
         env:
-          HAS_SERVER: ${{ secrets.OPS_ALERT_SMTP_SERVER != '' }}
-          HAS_PORT: ${{ secrets.OPS_ALERT_SMTP_PORT != '' }}
-          HAS_USER: ${{ secrets.OPS_ALERT_SMTP_USER != '' }}
-          HAS_PASSWORD: ${{ secrets.OPS_ALERT_SMTP_PASSWORD != '' }}
+          HAS_HOST: ${{ secrets.STALWART_SMTP_HOST != '' }}
+          HAS_PORT: ${{ secrets.STALWART_SMTP_PORT != '' }}
+          HAS_USER: ${{ secrets.STALWART_SMTP_USER != '' }}
+          HAS_PASSWORD: ${{ secrets.STALWART_SMTP_PASSWORD != '' }}
+          HAS_FROM: ${{ secrets.STALWART_SMTP_FROM != '' }}
+          HAS_TO: ${{ secrets.OPS_ALERT_TO != '' }}
         run: |
-          if [ "$HAS_SERVER" = "true" ] && [ "$HAS_PORT" = "true" ] && [ "$HAS_USER" = "true" ] && [ "$HAS_PASSWORD" = "true" ]; then
+          if [ "$HAS_HOST" = "true" ] && [ "$HAS_PORT" = "true" ] && [ "$HAS_USER" = "true" ] && [ "$HAS_PASSWORD" = "true" ] && [ "$HAS_FROM" = "true" ] && [ "$HAS_TO" = "true" ]; then
             echo "send=true" >> "$GITHUB_OUTPUT"
           else
             echo "send=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::OPS_ALERT SMTP secrets are not set (OPS_ALERT_SMTP_SERVER, OPS_ALERT_SMTP_PORT, OPS_ALERT_SMTP_USER, OPS_ALERT_SMTP_PASSWORD). Skipping failure mail to ops-alert@j-compute.com."
+            echo "::warning::Stalwart SMTP secrets are not set (STALWART_SMTP_HOST, STALWART_SMTP_PORT, STALWART_SMTP_USER, STALWART_SMTP_PASSWORD, STALWART_SMTP_FROM, OPS_ALERT_TO). Skipping failure mail."
           fi
 
       - name: Mail ops-alert on failure
         if: failure() && steps.ops-alert.outputs.send == 'true'
         uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
         with:
-          server_address: ${{ secrets.OPS_ALERT_SMTP_SERVER }}
-          server_port: ${{ secrets.OPS_ALERT_SMTP_PORT }}
-          username: ${{ secrets.OPS_ALERT_SMTP_USER }}
-          password: ${{ secrets.OPS_ALERT_SMTP_PASSWORD }}
-          from: ${{ secrets.OPS_ALERT_FROM || 'ops-alert@j-compute.com' }}
-          to: ops-alert@j-compute.com
+          server_address: ${{ secrets.STALWART_SMTP_HOST }}
+          server_port: ${{ secrets.STALWART_SMTP_PORT }}
+          secure: true
+          username: ${{ secrets.STALWART_SMTP_USER }}
+          password: ${{ secrets.STALWART_SMTP_PASSWORD }}
+          from: ${{ secrets.STALWART_SMTP_FROM }}
+          to: ${{ secrets.OPS_ALERT_TO }}
           subject: "[MermaidPocket CI] failed: ${{ github.event_name }} ${{ github.sha }}"
           body: |
             MermaidPocket CI failed.

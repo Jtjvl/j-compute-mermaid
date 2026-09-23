@@ -20,12 +20,13 @@ Retention is **2 days**. Zeus copies the artifact to downloads within minutes; A
 
 A failed run (pull request, push, or manual dispatch) mails **ops-alert@j-compute.com**. The subject is `[MermaidPocket CI] failed: <event> <sha>`. The body includes the branch, the job conclusion, and the Actions run URL.
 
-SMTP comes from Actions secrets. Zeus is provisioning the server; Hephaestus adds the secrets when ready:
+From is `alerts@j-compute.com`. The connection is SMTPS on port **465** (`secure: true`, implicit TLS). Zeus provisioned Stalwart and set these Actions secrets:
 
-- `OPS_ALERT_SMTP_SERVER`
-- `OPS_ALERT_SMTP_PORT`
-- `OPS_ALERT_SMTP_USER`
-- `OPS_ALERT_SMTP_PASSWORD`
-- `OPS_ALERT_FROM` (optional; default From is `ops-alert@j-compute.com`)
+- `STALWART_SMTP_HOST`
+- `STALWART_SMTP_PORT` (465, SMTPS)
+- `STALWART_SMTP_USER` (`alerts@j-compute.com`)
+- `STALWART_SMTP_PASSWORD`
+- `STALWART_SMTP_FROM` (`alerts@j-compute.com`)
+- `OPS_ALERT_TO` (`ops-alert@j-compute.com`)
 
-If the required secrets are missing, the notify step logs a warning and skips the send. That skip does not fail the job again.
+If any of those secrets is empty, the notify step logs a warning and skips the send. That skip does not fail the job again.
