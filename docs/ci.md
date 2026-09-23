@@ -10,15 +10,17 @@ Triggers: push to `main`, pull requests targeting `main`, and manual `workflow_d
 
 | Event | Assemble | Merge | Tag / GitHub Release | `app-debug` artifact |
 | --- | --- | --- | --- | --- |
-| `pull_request` → `main` | yes (gate) | yes, when green | no | not uploaded |
-| `push` → `main` | yes | n/a | `vMAJOR.MINOR.PATCH` from `versionName` if that tag is new | uploaded |
-| `workflow_dispatch` | yes | no | no | uploaded |
+| `pull_request` → `main` | yes (gate) | yes, when green | yes, after merge, if `v{versionName}` is new | 1-day handoff |
+| `push` → `main` | yes | n/a | `vMAJOR.MINOR.PATCH` from `versionName` if that tag is new | 2 days |
+| `workflow_dispatch` on `main` | yes | no | same as push | 2 days |
 
 Auto-merge applies to same-repository, non-draft pull requests whose tested head SHA is still the PR head. Mark a PR as draft until it is ready. Fork PRs assemble only.
 
-A merge to `main` that already has tag `v{versionName}` (same cut, no SemVer bump) skips tagging. Bump `versionName` / `versionCode` and add `CHANGELOG.md` `## x.y.z` when the cut should publish.
+A `GITHUB_TOKEN` merge does not start another `push` workflow. The pull-request job therefore tags and publishes after it merges, using the merge commit SHA and the assembled APK.
 
-The GitHub Release attaches `MermaidPocket-{versionName}-debug.apk`. Push/dispatch artifacts are kept **2 days** as a CI handoff.
+A merge that already has tag `v{versionName}` (same cut, no SemVer bump) skips tagging. Bump `versionName` / `versionCode` and add `CHANGELOG.md` `## x.y.z` when the cut should publish.
+
+The GitHub Release attaches `MermaidPocket-{versionName}-debug.apk`.
 
 ## Failure mail
 
