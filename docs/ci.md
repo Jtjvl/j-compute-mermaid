@@ -30,3 +30,16 @@ From is `alerts@j-compute.com`. The connection is SMTPS on port **465** (`secure
 - `OPS_ALERT_TO` (`ops-alert@j-compute.com`)
 
 If any of those secrets is empty, the notify step logs a warning and skips the send. That skip does not fail the job again.
+
+## Failure webhook
+
+After the ops-alert mail, the same failed run POSTs JSON to the Hephaestus routine webhook. The body is `source`, `repo`, `event`, `ref`, `sha`, `conclusion` (`failure`), `run_url`, and `workflow`.
+
+Secrets (empty until Zeus or Hephaestus fills them):
+
+- `HEPHAESTUS_WEBHOOK_URL` (routine panel **POST to**)
+- `HEPHAESTUS_WEBHOOK_KEY` (routine panel raw key)
+
+The request sends `Authorization: Bearer <HEPHAESTUS_WEBHOOK_KEY>`. That is the header the [Grok Bot routine panel](https://cursor.com/help/grok-bot/routines) documents: the key is the secret, senders include it as `Authorization: Bearer <key>`, and the copyable header field is that same Bearer value. `X-Webhook-Key` is not sent.
+
+If either secret is empty, the step logs a warning and skips the POST. That skip does not fail the job.

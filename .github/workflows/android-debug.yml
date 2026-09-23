@@ -5,7 +5,8 @@
 # Artifact retention is 2 days. Zeus copies the artifact to downloads within
 # minutes; Actions storage is only a handoff buffer.
 #
-# On failure (pull request, push, and workflow_dispatch), mail ops-alert.
+# On failure (pull request, push, and workflow_dispatch), mail ops-alert,
+# then POST JSON to the Hephaestus routine webhook.
 # Zeus provisioned Stalwart and set these Actions secrets:
 #   STALWART_SMTP_HOST
 #   STALWART_SMTP_PORT   (465, SMTPS — implicit TLS; the step sets secure: true)
@@ -15,6 +16,18 @@
 #   OPS_ALERT_TO         (ops-alert@j-compute.com)
 # From is STALWART_SMTP_FROM. To is OPS_ALERT_TO.
 # If any of those secrets is empty, the notify step warns and skips the send.
+#
+# Hephaestus webhook (may be empty until Zeus/Hephaestus fill them):
+#   HEPHAESTUS_WEBHOOK_URL   (routine panel "POST to")
+#   HEPHAESTUS_WEBHOOK_KEY   (routine panel raw key)
+# Authorization is `Authorization: Bearer <HEPHAESTUS_WEBHOOK_KEY>`.
+# The Grok Bot routine panel documents that header: the key is the secret,
+# senders include it as `Authorization: Bearer <key>`, and the copyable
+# "header" field is that same Bearer value.
+# https://cursor.com/help/grok-bot/routines
+# `X-Webhook-Key` is not sent.
+# If either webhook secret is empty, the step warns and skips the POST.
+# That skip does not fail the job.
 
 name: Android Debug APK
 
@@ -123,3 +136,43 @@ jobs:
             SHA: ${{ github.sha }}
             Conclusion: ${{ job.status }}
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Check Hephaestus webhook secrets
+        id: hephaestus
+        if: failure()
+        env:
+          HAS_URL: ${{ secrets.HEPHAESTUS_WEBHOOK_URL != '' }}
+          HAS_KEY: ${{ secrets.HEPHAESTUS_WEBHOOK_KEY != '' }}
+        run: |
+          if [ "$HAS_URL" = "true" ] && [ "$HAS_KEY" = "true" ]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "send=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Hephaestus webhook secrets are not set (HEPHAESTUS_WEBHOOK_URL, HEPHAESTUS_WEBHOOK_KEY). Skipping failure webhook."
+          fi
+
+      - name: Notify Hephaestus webhook on failure
+        if: failure() && steps.hephaestus.outputs.send == 'true'
+        env:
+          HEPHAESTUS_WEBHOOK_URL: ${{ secrets.HEPHAESTUS_WEBHOOK_URL }}
+          HEPHAESTUS_WEBHOOK_KEY: ${{ secrets.HEPHAESTUS_WEBHOOK_KEY }}
+          WEBHOOK_REPO: ${{ github.repository }}
+          WEBHOOK_EVENT: ${{ github.event_name }}
+          WEBHOOK_REF: ${{ github.head_ref || github.ref_name }}
+          WEBHOOK_SHA: ${{ github.sha }}
+          WEBHOOK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WEBHOOK_WORKFLOW: ${{ github.workflow }}
+        run: |
+          python3 -c 'import json, os; print(json.dumps({
+            "source": "github-actions",
+            "repo": os.environ["WEBHOOK_REPO"],
+            "event": os.environ["WEBHOOK_EVENT"],
+            "ref": os.environ["WEBHOOK_REF"],
+            "sha": os.environ["WEBHOOK_SHA"],
+            "conclusion": "failure",
+            "run_url": os.environ["WEBHOOK_RUN_URL"],
+            "workflow": os.environ["WEBHOOK_WORKFLOW"],
+          }))' | curl -fsS -X POST "$HEPHAESTUS_WEBHOOK_URL" \
+            -H "Authorization: Bearer ${HEPHAESTUS_WEBHOOK_KEY}" \
+            -H "Content-Type: application/json" \
+            --data-binary @-
