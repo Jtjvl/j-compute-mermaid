@@ -2,6 +2,10 @@
 
 User-facing releases only. See [VERSIONING.md](VERSIONING.md).
 
+## 0.3.3
+
+- CI failures also POST to Hephaestus webhook
+
 ## 0.3.2
 
 - Lean CI: pull requests assemble only and upload no artifact; push to main keeps the debug APK for 2 days
