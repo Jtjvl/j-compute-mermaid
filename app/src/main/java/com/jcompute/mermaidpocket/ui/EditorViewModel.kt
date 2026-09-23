@@ -15,7 +15,6 @@ import com.jcompute.mermaidpocket.data.AppSettings
 import com.jcompute.mermaidpocket.data.DiagramTheme
 import com.jcompute.mermaidpocket.data.DiagramSync
 import com.jcompute.mermaidpocket.data.DurableDocuments
-import com.jcompute.mermaidpocket.data.MermaidIngest
 import com.jcompute.mermaidpocket.data.StoredDiagram
 import com.jcompute.mermaidpocket.data.TitleParser
 import com.jcompute.mermaidpocket.export.ExportFormat
@@ -257,15 +256,22 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * Paste, Open, and share-intent replace the buffer and drop [EditorUiState.currentFile].
+     * Save then creates a new library file instead of overwriting the previously linked one.
+     */
     fun ingest(text: String, fileName: String? = null) {
-        val source = MermaidIngest.extractSource(text)
+        val link = EditorLink.imported(text, fileName)
+        val source = link.source
         history.checkpoint(source, System.currentTimeMillis())
         _state.update {
             val pass = RenderPass.next(it.renderEpoch, source)
             it.copy(
                 screen = Screen.Document,
+                currentFile = link.currentFile,
                 source = source,
-                title = displayTitle(source, fileName),
+                savedSource = link.savedSource,
+                title = link.title,
                 mode = EditorMode.View,
                 renderEpoch = pass.epoch,
                 isRendering = pass.showSpinner,
@@ -308,15 +314,16 @@ class EditorViewModel(
     fun openStored(file: File) {
         viewModelScope.launch {
             val source = withContext(Dispatchers.IO) { sync.read(file) }
+            val link = EditorLink.stored(file, source)
             history.reset(source)
             _state.update {
                 val pass = RenderPass.next(it.renderEpoch, source)
                 it.copy(
                     screen = Screen.Document,
-                    currentFile = file,
-                    source = source,
-                    savedSource = source,
-                    title = displayTitle(source, file.name),
+                    currentFile = link.currentFile,
+                    source = link.source,
+                    savedSource = link.savedSource,
+                    title = link.title,
                     mode = EditorMode.View,
                     renderEpoch = pass.epoch,
                     isRendering = pass.showSpinner,
@@ -331,6 +338,7 @@ class EditorViewModel(
         }
     }
 
+    /** Open text that is not already a library file. [ingest] unlinks the previous diagram. */
     fun openImported(text: String, fileName: String?) {
         ingest(text, fileName)
     }

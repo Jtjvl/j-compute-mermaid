@@ -55,7 +55,7 @@ No accounts, sync, or network. The manifest does not request `INTERNET`.
 
 Saved diagrams are plain UTF-8 `.mmd` files in **Documents/MermaidPocket**.
 
-That folder is on shared storage, granted with the system folder picker (`ACTION_OPEN_DOCUMENT_TREE`, persistable URI permission). Android deletes app-private storage on uninstall; it does not delete this folder. After you reinstall MermaidPocket, choose the same folder and the files are listed again. If you only grant `Documents`, the app uses the `MermaidPocket` directory inside it.
+That folder is on shared storage, granted with the system folder picker (`ACTION_OPEN_DOCUMENT_TREE`, persistable URI permission). Android deletes app-private storage on uninstall; it does not delete this folder. After you reinstall MermaidPocket, choose the same folder and the files are listed again. If you only grant `Documents`, the app uses the `MermaidPocket` directory inside it. If the folder you pick already contains `.mmd` files, that folder is the library; a nested `MermaidPocket` directory is not created in its place.
 
 The app also keeps a working copy in `filesDir/diagrams/` so the editor can open files directly. The first time you grant the folder, existing `.mmd` files in that working copy (including a pre-v1 `diagrams.json` after it is converted) are copied into `Documents/MermaidPocket`. Files already in the folder are copied back into the working copy. Same text is not duplicated. The newer file wins when both sides differ.
 
@@ -116,7 +116,7 @@ minSdk 26.
 ## Files
 
 - **Save** of `.mmd` writes `Documents/MermaidPocket/<name>.mmd` (and a working copy under `filesDir/diagrams/`). Preview PNGs stay in `diagrams/.thumbs/`
-- **Files** lists those files with diagram thumbnails (placeholder until a diagram has been viewed or saved)
+- **Files** lists those files with diagram thumbnails (placeholder until a diagram has been viewed or saved). Each row shows the parsed title and the `.mmd` file name, so two diagrams can share a title
 - Long-press a row to multi-select and bulk-delete; swipe deletes one file; the share icon sends that `.mmd`
 - Unsaved paste/share stays in memory until you save
 

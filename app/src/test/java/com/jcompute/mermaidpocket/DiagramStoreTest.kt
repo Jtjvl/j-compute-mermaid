@@ -73,6 +73,25 @@ class DiagramStoreTest {
     }
 
     @Test
+    fun sameParsedTitleStillListsEveryFile() {
+        val shared = "%% Shared\nflowchart TD\n  A-->B"
+        store.importFile("one.mmd", shared, 1_000L)
+        store.importFile("two.mmd", shared, 2_000L)
+        store.importFile("three.mmd", "%% Shared\nflowchart LR\n  C-->D", 3_000L)
+        store.importFile("four.mmd", "%% Shared\nsequenceDiagram\n  A->>B: hi", 4_000L)
+
+        val listed = store.list()
+        assertEquals(4, listed.size)
+        assertEquals(setOf("one.mmd", "two.mmd", "three.mmd", "four.mmd"), listed.map { it.name }.toSet())
+        assertTrue(listed.all { it.title == "Shared" })
+        assertEquals(4, listed.map { it.file.absolutePath }.distinct().size)
+        val source = File("app/src/main/java/com/jcompute/mermaidpocket/data/DiagramStore.kt")
+            .let { file -> if (file.exists()) file else File("../app/src/main/java/com/jcompute/mermaidpocket/data/DiagramStore.kt") }
+            .readText()
+        assertFalse(source.contains("distinctBy"))
+    }
+
+    @Test
     fun emptyThumbnailBytesAreIgnored() {
         val file = store.write(store.uniqueFile("empty"), "flowchart TD\n A-->B")
         store.writeThumbnail(file, byteArrayOf())

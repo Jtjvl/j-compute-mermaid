@@ -20,16 +20,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,6 +56,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jcompute.mermaidpocket.data.Appearance
+import com.jcompute.mermaidpocket.data.DiagramTheme
 import com.jcompute.mermaidpocket.data.StoredDiagram
 import java.io.File
 import java.text.DateFormat
@@ -71,11 +69,16 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FilesTopBar(
     selection: FileSelection,
+    appearance: Appearance,
+    diagramTheme: DiagramTheme,
     onCancelSelection: () -> Unit,
     onDeleteSelected: () -> Unit,
     onNew: () -> Unit,
+    onOpen: () -> Unit,
+    onDiagramFolder: () -> Unit,
+    onAppearance: (Appearance) -> Unit,
+    onDiagramTheme: (DiagramTheme) -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -107,21 +110,16 @@ fun FilesTopBar(
                     Icon(Icons.Outlined.Delete, contentDescription = "Delete selected")
                 }
             } else {
-                Box {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("New") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onNew()
-                            },
-                        )
-                    }
-                }
+                PocketOverflowMenu(
+                    appearance = appearance,
+                    diagramTheme = diagramTheme,
+                    showDocumentActions = false,
+                    onNew = onNew,
+                    onOpen = onOpen,
+                    onDiagramFolder = onDiagramFolder,
+                    onAppearance = onAppearance,
+                    onDiagramTheme = onDiagramTheme,
+                )
             }
         },
     )
@@ -285,13 +283,18 @@ private fun FileRow(
 ) {
     ListItem(
         headlineContent = {
-            Text(diagram.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(diagram.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            Text(
-                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-                    .format(Date(diagram.updatedAtMillis)),
-            )
+            Column {
+                Text(diagram.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                        .format(Date(diagram.updatedAtMillis)),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         },
         leadingContent = {
             DiagramThumbnail(file = diagram.thumbnail)

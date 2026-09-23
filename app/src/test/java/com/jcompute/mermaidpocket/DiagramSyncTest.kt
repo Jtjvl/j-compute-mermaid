@@ -228,6 +228,25 @@ class DiagramSyncTest {
     }
 
     @Test
+    fun reconcilePullsEveryRemoteFileWhenTitlesMatch() {
+        val shared = "%% Quarterly\nflowchart TD\n  A-->B"
+        listOf("q1.mmd", "q2.mmd", "q3.mmd", "q4.mmd").forEachIndexed { index, name ->
+            remote.write(name, shared, modifiedAt = (index + 1) * 10L)
+        }
+        val sync = sync()
+        val report = sync.reconcile()
+        assertEquals(4, report.pulled)
+        assertEquals(0, report.pushed)
+        val listed = sync.list()
+        assertEquals(4, listed.size)
+        assertEquals(setOf("q1.mmd", "q2.mmd", "q3.mmd", "q4.mmd"), listed.map { it.name }.toSet())
+        assertTrue(listed.all { it.title == "Quarterly" })
+        assertEquals(4, listed.map { it.file.canonicalPath }.distinct().size)
+        assertEquals(shared, sync.read(listed.first { it.name == "q1.mmd" }.file))
+        assertEquals(shared, sync.read(listed.first { it.name == "q4.mmd" }.file))
+    }
+
+    @Test
     fun readmeNamesTheDurablePath() {
         val readme = source("README.md")
         assertTrue(readme.contains("Documents/MermaidPocket"))
