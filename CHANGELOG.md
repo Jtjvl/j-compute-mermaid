@@ -2,6 +2,12 @@
 
 User-facing releases only. See [VERSIONING.md](VERSIONING.md).
 
+## 0.3.5
+
+- Open, list, and save any readable text diagram (not `.mmd`-only)
+- Save overwrites the original file name
+- SAF Browse-storage Back is a platform limitation (Muses lock)
+
 ## 0.3.4
 
 - Files lists all sibling `.mmd` peers (null MIME / `DocumentFile.isFile` false no longer drops desktop copies; `..` in names allowed; reconcile continues on one bad peer)
