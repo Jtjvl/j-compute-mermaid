@@ -111,7 +111,7 @@ minSdk 26.
 | **Paste** | Clipboard text → strip fences → current document → **View** |
 | **Share to MermaidPocket** | `ACTION_SEND` `text/plain` or `text/*` → same ingest → **View** |
 | **Open with** | `VIEW` / `EDIT` for a diagram file (`.mmd`, `.txt`, or other readable text) **links** that file into the library under its real name so Files shows it and Save overwrites it. Plain shared text still ingests unlinked. |
-| **Open…** | In-app list of the granted diagram folder (Back returns to the app). **Browse storage…** uses the system picker. Opening a file copies or reuses the working copy so it appears in Files. Markdown fences stripped. |
+| **Open…** | In-app list of the granted diagram folder (Back returns to the app). **Browse storage…** uses the system SAF picker; Back walks folders (platform limitation — no custom file browser). Opening a file copies or reuses the working copy so it appears in Files. Markdown fences stripped. |
 
 ## Files
 

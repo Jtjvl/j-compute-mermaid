@@ -20,9 +20,10 @@ import com.jcompute.mermaidpocket.data.RemoteFile
 /**
  * In-app Open list of the granted library tree.
  *
- * System SAF Back walks parent folders. This dialog's Back / dismiss returns
- * to the app. Browse storage… still uses the system picker for files outside
- * the granted tree.
+ * This dialog's Back / dismiss returns to the app. Browse storage… still uses
+ * the system SAF picker for files outside the granted tree. SAF Back walking
+ * parent folders is a platform limitation; do not invent a custom file browser
+ * just to change that.
  */
 @Composable
 fun LibraryOpenDialog(
