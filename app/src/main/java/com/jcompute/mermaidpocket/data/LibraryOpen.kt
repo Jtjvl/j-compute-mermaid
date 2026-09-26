@@ -1,11 +1,12 @@
 package com.jcompute.mermaidpocket.data
 
 /**
- * Name for an Open / Open-with `.mmd` that should join the library.
+ * Name for an Open / Open-with file that should join the library.
  *
- * Reuses an existing working-copy name when the incoming file is that
- * diagram. A colliding name from some other folder gets a new unique file
- * so Save does not overwrite the wrong row.
+ * Keeps the incoming display name, including non-`.mmd` text names, so Save
+ * overwrites that file. Reuses an existing working-copy name when the
+ * incoming file is that diagram. A colliding name from some other folder
+ * gets a new unique `.mmd` so Save does not overwrite the wrong row.
  */
 object LibraryOpen {
     fun resolveName(
@@ -38,15 +39,7 @@ object LibraryOpen {
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?: return null
-        val asMmd = when {
-            LibraryMembership.isDiagramFileName(raw) -> raw
-            raw.endsWith(".mermaid", ignoreCase = true) -> raw.dropLast(".mermaid".length) + ".mmd"
-            raw.endsWith(".txt", ignoreCase = true) || raw.endsWith(".md", ignoreCase = true) -> {
-                raw.substringBeforeLast('.') + ".mmd"
-            }
-            else -> null
-        }
-        return asMmd?.takeIf { LibraryMembership.isDiagramFileName(it) }
+        return raw.takeIf { LibraryMembership.isDiagramFileName(it) }
     }
 
     private fun uniqueAmong(slug: String, existingNames: Set<String>): String {

@@ -11,9 +11,7 @@ object TitleParser {
             ?.substringAfterLast('\\')
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?.removeSuffix(".mmd")
-            ?.removeSuffix(".txt")
-            ?.removeSuffix(".mermaid")
+            ?.let { stripSourceExtension(it) }
             ?.trim()
             ?.takeIf { it.isNotEmpty() && !it.equals("document", ignoreCase = true) }
 
@@ -37,6 +35,14 @@ object TitleParser {
             !firstLine.isNullOrBlank() -> firstLine
             else -> fallback
         }
+    }
+
+    private val sourceSuffixes = listOf(".mmd", ".mermaid", ".txt", ".md", ".markdown")
+
+    private fun stripSourceExtension(name: String): String {
+        val suffix = sourceSuffixes.firstOrNull { name.endsWith(it, ignoreCase = true) }
+            ?: return name
+        return name.dropLast(suffix.length)
     }
 
     fun fileSlug(title: String): String {

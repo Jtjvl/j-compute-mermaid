@@ -1,15 +1,16 @@
 package com.jcompute.mermaidpocket.data
 
 /**
- * Where the granted tree's `.mmd` files live.
+ * Where the granted tree's diagram files live.
  *
- * A folder the user picked that already contains `.mmd` files is the library.
- * [MermaidPocket] is used or created only when that folder is an ancestor with
- * no `.mmd` files of its own (the usual case is `Documents`).
+ * A folder the user picked that already contains mermaid sources (`.mmd` /
+ * `.mermaid`) is the library. [MermaidPocket] is used or created only when
+ * that folder is an ancestor with no mermaid files of its own (the usual
+ * case is `Documents`, which may have unrelated `.txt` files).
  *
- * A child is a diagram when its **name** ends with `.mmd` and it is not a
- * directory. MIME is ignored: DocumentFile.isFile() is false for null MIME,
- * which would hide desktop-copied siblings of app-created `text/plain` files.
+ * Listing those mermaid files ignores MIME: DocumentFile.isFile() is false
+ * for null MIME, which would hide desktop-copied siblings of app-created
+ * `text/plain` files. Generic text names are not a folder-choice signal.
  */
 internal enum class LibraryRootChoice {
     Picked,
@@ -28,7 +29,7 @@ internal object LibraryRoot {
     fun choose(pickedName: String?, children: List<LibraryChild>): LibraryRootChoice {
         if (pickedName.equals(FOLDER_NAME, ignoreCase = true)) return LibraryRootChoice.Picked
         val hasMmd = children.any { child ->
-            !child.directory && LibraryMembership.isDiagramFileName(child.name)
+            !child.directory && LibraryMembership.isMermaidLibraryName(child.name)
         }
         if (hasMmd) return LibraryRootChoice.Picked
         val hasPocket = children.any { child ->

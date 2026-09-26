@@ -16,17 +16,18 @@ import androidx.documentfile.provider.DocumentFile
  * App-private `filesDir` is deleted on uninstall. Files written through a
  * folder the user grants are not. The canonical place is [DISPLAY_PATH]:
  * pick `Documents` and this class uses (or creates) the `MermaidPocket` child,
- * or pick that folder directly. A picked folder that already has `.mmd` files
- * at its root is the library itself — those files are not skipped in favor of
- * a nested `MermaidPocket` directory.
+ * or pick that folder directly. A picked folder that already has mermaid
+ * sources (`.mmd` / `.mermaid`) at its root is the library itself — those
+ * files are not skipped in favor of a nested `MermaidPocket` directory.
  *
- * Listing is **direct children only**. Peer `.mmd` files are included by name
- * even when MIME is null ([DocumentFile.isFile] is false then — typical for
- * desktop-copied diagrams next to app-created `text/plain` ones). The child
- * query paginates; [DocumentFile.listFiles] is the fallback.
+ * Listing is **direct children only**. Peer text/mermaid files are included
+ * by name even when MIME is null ([DocumentFile.isFile] is false then —
+ * typical for desktop-copied diagrams next to app-created `text/plain`
+ * ones). Extension is not required. The child query paginates;
+ * [DocumentFile.listFiles] is the fallback.
  *
  * The grant itself does not survive uninstall. After reinstall, choose the
- * same folder and [DiagramSync.reconcile] copies the `.mmd` files back.
+ * same folder and [DiagramSync.reconcile] copies the diagram files back.
  */
 class DurableDocuments(
     context: Context,

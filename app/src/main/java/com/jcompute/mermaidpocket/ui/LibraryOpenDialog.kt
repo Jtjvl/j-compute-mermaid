@@ -37,7 +37,7 @@ fun LibraryOpenDialog(
         text = {
             Column(Modifier.fillMaxWidth()) {
                 if (files.isEmpty()) {
-                    Text("No .mmd files in the diagram folder yet. Browse storage to open one.")
+                    Text("No diagrams in the diagram folder yet. Browse storage to open one.")
                 } else {
                     LazyColumn(
                         modifier = Modifier

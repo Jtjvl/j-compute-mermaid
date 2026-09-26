@@ -97,6 +97,7 @@ class ExportPlanTest {
         assertEquals("Foo_Bar.jpg", ExportNames.fileName("Foo Bar.mmd", ExportFormat.Jpeg))
         assertEquals("Foo_Bar.svg", ExportNames.fileName("Foo Bar.mmd", ExportFormat.Svg))
         assertEquals("Foo_Bar.mmd", ExportNames.fileName("Foo Bar.mmd", ExportFormat.Mmd))
+        assertEquals("Foo_Bar.png", ExportNames.fileName("Foo Bar.txt", ExportFormat.Png))
         assertEquals("diagram.png", ExportNames.fileName("diagram.png", ExportFormat.Png))
     }
 }

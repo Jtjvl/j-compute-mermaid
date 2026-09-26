@@ -49,6 +49,10 @@ class LibraryRootTest {
             LibraryRoot.choose("Notes", listOf(LibraryChild("Diagram.MMD", directory = false))),
         )
         assertEquals(
+            LibraryRootChoice.Picked,
+            LibraryRoot.choose("Notes", listOf(LibraryChild("flow.mermaid", directory = false))),
+        )
+        assertEquals(
             LibraryRootChoice.CreateChild,
             LibraryRoot.choose("Notes", listOf(LibraryChild("not-a-file.mmd", directory = true))),
         )

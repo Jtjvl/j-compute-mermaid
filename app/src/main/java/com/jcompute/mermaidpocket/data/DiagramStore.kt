@@ -12,9 +12,10 @@ data class StoredDiagram(
 )
 
 /**
- * Working copies of plain UTF-8 `.mmd` files in [filesDir]`/diagrams`.
+ * Working copies of plain UTF-8 diagram files in [filesDir]`/diagrams`.
  *
- * This directory is internal app storage. An upgrade of the same applicationId
+ * New blanks use `.mmd`. Opened siblings keep their real names. This
+ * directory is internal app storage. An upgrade of the same applicationId
  * keeps it, and nothing here deletes it on startup. Uninstall wipes it.
  * [DurableDocuments] mirrors the files to `Documents/MermaidPocket`, which
  * stays on the device. Thumbnails live in `diagrams/.thumbs` and are regenerable.
@@ -27,7 +28,7 @@ class DiagramStore(private val filesDir: File) {
         dir.mkdirs()
         thumbsDir.mkdirs()
         // One row per file path. Do not collapse diagrams that share a title.
-        return dir.listFiles { file -> file.isFile && file.name.endsWith(".mmd", ignoreCase = true) }
+        return dir.listFiles { file -> file.isFile && LibraryMembership.isDiagramFileName(file.name) }
             .orEmpty()
             .map { file ->
                 val thumb = thumbnailFile(file)

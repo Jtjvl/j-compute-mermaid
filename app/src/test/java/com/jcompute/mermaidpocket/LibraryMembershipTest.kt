@@ -23,11 +23,12 @@ class LibraryMembershipTest {
     }
 
     @Test
-    fun nestedSiblingAndNonMmdDestinationsStayOut() {
+    fun nestedSiblingAndBinaryDestinationsStayOut() {
         assertNull(LibraryMembership.directChildName(library, "$library/nested/flow.mmd"))
         assertNull(LibraryMembership.directChildName(library, "primary:Documents/MermaidPocketBackup/flow.mmd"))
         assertNull(LibraryMembership.directChildName(library, "primary:Download/flow.mmd"))
-        assertNull(LibraryMembership.directChildName(library, "$library/notes.txt"))
+        assertEquals("notes.txt", LibraryMembership.directChildName(library, "$library/notes.txt"))
+        assertNull(LibraryMembership.directChildName(library, "$library/photo.png"))
         assertNull(LibraryMembership.directChildName(library, "$library/.mmd"))
         assertNull(LibraryMembership.directChildName(library, library))
         assertNull(LibraryMembership.directChildName(null, "$library/flow.mmd"))
@@ -35,7 +36,13 @@ class LibraryMembershipTest {
         assertFalse(LibraryMembership.isDiagramFileName("../escape.mmd"))
         assertFalse(LibraryMembership.isDiagramFileName("nested/flow.mmd"))
         assertTrue(LibraryMembership.isDiagramFileName("rev..2.mmd"))
+        assertTrue(LibraryMembership.isDiagramFileName("notes.txt"))
+        assertTrue(LibraryMembership.isDiagramFileName("diagram"))
+        assertFalse(LibraryMembership.isDiagramFileName("photo.png"))
         assertFalse(LibraryMembership.isDiagramFileName(".."))
+        assertTrue(LibraryMembership.isMermaidLibraryName("flow.mmd"))
+        assertTrue(LibraryMembership.isMermaidLibraryName("flow.mermaid"))
+        assertFalse(LibraryMembership.isMermaidLibraryName("notes.txt"))
     }
 
     @Test

@@ -30,6 +30,10 @@ object ExportNames {
         val leaf = sourceName.substringAfterLast('/').substringAfterLast('\\').trim()
         val base = leaf
             .removeSuffix(".mmd")
+            .removeSuffix(".mermaid")
+            .removeSuffix(".txt")
+            .removeSuffix(".md")
+            .removeSuffix(".markdown")
             .removeSuffix(".svg")
             .removeSuffix(".png")
             .removeSuffix(".jpg")

@@ -105,6 +105,16 @@
                     android:mimeType="*/*"
                     android:pathPattern=".*\\.md"
                     android:scheme="file" />
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.txt"
+                    android:scheme="content" />
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:pathPattern=".*\\.txt"
+                    android:scheme="file" />
             </intent-filter>
         </activity>
 

@@ -17,7 +17,7 @@ The launcher mark is the signed-off diamond-fork on a square full-bleed `#2A2A2E
 1. Copy a diagram from chat (plain Mermaid or a ` ```mermaid ` fence) **or** share that text into MermaidPocket.
 2. The app strips markdown fences and opens **View**.
 3. **Copy image** puts a PNG on the clipboard (device pixel ratio). Paste it into another app.
-4. **Save** keeps the source as `.mmd` in **Documents/MermaidPocket**. **Files** lists those diagrams.
+4. **Save** writes the source into **Documents/MermaidPocket** (the opened file’s real name, or `.mmd` for a new blank). **Files** lists those diagrams.
 
 Paste and share-to-app are equal ingest paths.
 
@@ -110,13 +110,13 @@ minSdk 26.
 | --- | --- |
 | **Paste** | Clipboard text → strip fences → current document → **View** |
 | **Share to MermaidPocket** | `ACTION_SEND` `text/plain` or `text/*` → same ingest → **View** |
-| **Open with** | `VIEW` / `EDIT` for a `.mmd` (or sister text) **links** that file into the library so Files shows it and Save overwrites it. Plain shared text still ingests unlinked. |
-| **Open…** | In-app list of the granted diagram folder (Back returns to the app). **Browse storage…** uses the system picker. Opening a `.mmd` copies or reuses the working copy so it appears in Files. Markdown fences stripped. |
+| **Open with** | `VIEW` / `EDIT` for a diagram file (`.mmd`, `.txt`, or other readable text) **links** that file into the library under its real name so Files shows it and Save overwrites it. Plain shared text still ingests unlinked. |
+| **Open…** | In-app list of the granted diagram folder (Back returns to the app). **Browse storage…** uses the system picker. Opening a file copies or reuses the working copy so it appears in Files. Markdown fences stripped. |
 
 ## Files
 
-- **Save** of `.mmd` writes `Documents/MermaidPocket/<name>.mmd` (and a working copy under `filesDir/diagrams/`). Preview PNGs stay in `diagrams/.thumbs/`
-- **Files** lists every peer `.mmd` in the granted library folder (name match, including files with no MIME). Each row shows the parsed title and the `.mmd` file name, so two diagrams can share a title. Opening a listed row sets the chrome filename and parsed title to that row.
+- **Save** of a linked file overwrites that same name in `Documents/MermaidPocket` (and a working copy under `filesDir/diagrams/`). A new blank first-save still uses `.mmd`. Preview PNGs stay in `diagrams/.thumbs/`
+- **Files** lists readable text/mermaid peers in the granted library folder (not only `.mmd`; including files with no MIME). Each row shows the parsed title and the real file name, so two diagrams can share a title. Opening a listed row sets the chrome filename and parsed title to that row.
 - Long-press a row to multi-select and bulk-delete; swipe deletes one file; the share icon sends that `.mmd`
 - Unsaved paste/share stays in memory until you save
 
@@ -132,7 +132,7 @@ app/src/main/assets/mermaid/
 ```
 
 - `MermaidIngest` unwraps ` ```mermaid ` / ` ``` ` fences
-- `DiagramStore` is a list of real `.mmd` files, not a JSON recents log
+- `DiagramStore` is a list of real diagram files, not a JSON recents log
 - Chrome is Material 3; the diagram canvas is the hero
 
 ## Device smoke
