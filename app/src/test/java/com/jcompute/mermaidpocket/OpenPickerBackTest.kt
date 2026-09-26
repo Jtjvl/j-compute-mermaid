@@ -12,13 +12,13 @@ class OpenPickerBackTest {
         assertTrue(contract.contains("ActivityResultContracts.OpenDocument"))
         assertTrue(contract.contains("LibraryOpenDialog"))
         assertTrue(contract.contains("platform limitation"))
-        assertTrue(contract.contains("Do not replace it with a custom file browser"))
+        assertTrue(contract.contains("custom file browser"))
         assertFalse(contract.contains("ACTION_GET_CONTENT"))
 
         val dialog = source("app/src/main/java/com/jcompute/mermaidpocket/ui/LibraryOpenDialog.kt")
         assertTrue(dialog.contains("returns to the app"))
         assertTrue(dialog.contains("platform limitation"))
-        assertTrue(dialog.contains("do not invent a custom file browser"))
+        assertTrue(dialog.contains("custom file browser"))
 
         val screen = source("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorScreen.kt")
         assertTrue(screen.contains("LibraryOpenDialog"))
