@@ -254,6 +254,34 @@ class DiagramSyncTest {
     }
 
     @Test
+    fun linkOpenedTxtKeepsTxtAndSaveOverwritesIt() {
+        val sync = sync()
+        val source = "%% External\nflowchart TD\n  A-->B"
+        val linked = sync.linkOpened("foo.txt", source)
+        assertEquals("foo.txt", linked.file.name)
+        assertEquals(source, sync.read(linked.file))
+        assertEquals(setOf("foo.txt"), remote.files.keys)
+        assertEquals(listOf("foo.txt"), sync.list().map { it.name })
+
+        val again = sync.write(linked.file, "%% External\nflowchart TD\n  A-->C")
+        assertEquals(linked.file.canonicalPath, again.file.canonicalPath)
+        assertEquals("foo.txt", again.file.name)
+        assertEquals("%% External\nflowchart TD\n  A-->C", remote.files.getValue("foo.txt").first)
+        assertEquals(1, sync.list().size)
+        assertFalse(remote.files.containsKey("foo.txt.mmd"))
+        assertFalse(remote.files.containsKey("foo.mmd"))
+    }
+
+    @Test
+    fun planSyncsTxtSiblingsTheSameAsMmd() {
+        val ops = DiagramSyncPlan.plan(
+            local = listOf(SyncFile("kept.txt", 10, "flowchart TD\n  A-->B")),
+            remote = listOf(SyncFile("restored.txt", 20, "flowchart LR\n  C-->D")),
+        )
+        assertEquals(listOf("kept.txt", "restored.txt"), ops.map { it.name })
+    }
+
+    @Test
     fun linkOpenedCopiesAMissingFileAndSaveOverwritesIt() {
         val sync = sync()
         val source = "%% External\nflowchart TD\n  A-->B"

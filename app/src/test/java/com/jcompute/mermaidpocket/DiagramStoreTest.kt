@@ -34,8 +34,9 @@ class DiagramStoreTest {
         newer.setLastModified(2_000L)
         store.writeThumbnail(newer, byteArrayOf(1, 2, 3, 4))
 
+        store.importFile("older.txt", "flowchart TD\n X-->Y", 500L)
         val names = store.list().map { it.name }
-        assertEquals(listOf("beta.mmd", "alpha.mmd"), names)
+        assertEquals(listOf("beta.mmd", "alpha.mmd", "older.txt"), names)
         assertTrue(root.resolve("diagrams").listFiles().orEmpty().none { it.extension.equals("png", true) })
     }
 

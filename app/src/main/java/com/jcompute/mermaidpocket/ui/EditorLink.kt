@@ -7,7 +7,7 @@ import java.io.File
 /**
  * Which library file the open buffer will overwrite on Save.
  *
- * [stored] keeps the link (Files row, Open…, Open-with of a `.mmd`).
+ * [stored] keeps the link (Files row, Open…, Open-with of a diagram file).
  * [imported] drops it: paste and share-of-text load the buffer only, so the
  * next Save creates a new `.mmd` instead of writing over the diagram that
  * happened to be open before. New / blank stays unlinked until the first Save.

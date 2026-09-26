@@ -4,9 +4,10 @@ package com.jcompute.mermaidpocket.data
  * Direct children of the library folder that should appear in Files.
  *
  * [androidx.documentfile.provider.DocumentFile.isFile] is false when MIME is
- * null. Desktop-copied `.mmd` files often have no MIME (the app writes
- * `text/plain`). Those siblings must still be listed. Skip only real
- * directories. Identity is the file name, not title or slug.
+ * null. Desktop-copied diagrams often have no MIME (the app writes
+ * `text/plain`). Those siblings must still be listed, including non-`.mmd`
+ * text names. Skip directories and obvious binaries/images. Identity is the
+ * file name, not title or slug.
  */
 data class LibraryChildRow(
     val name: String?,
@@ -41,7 +42,10 @@ object LibraryChildren {
     fun isVisibleDiagram(name: String?, mimeType: String?, documentId: String? = null): Boolean {
         if (isDirectory(mimeType)) return false
         val display = displayName(name, documentId) ?: return false
-        return LibraryMembership.isDiagramFileName(display)
+        if (!LibraryMembership.isSafeFileName(display)) return false
+        if (LibraryMembership.isMermaidLibraryName(display)) return true
+        if (!LibraryMembership.isDiagramFileName(display)) return false
+        return !LibraryMembership.isExcludedBinaryMime(mimeType)
     }
 
     fun diagrams(rows: List<LibraryChildRow>): List<LibraryChildRow> {

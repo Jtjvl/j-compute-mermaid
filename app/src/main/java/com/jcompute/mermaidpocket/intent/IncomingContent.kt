@@ -8,6 +8,8 @@ import com.jcompute.mermaidpocket.data.MermaidIngest
 data class IncomingDocument(
     val text: String,
     val displayName: String?,
+    /** File-backed VIEW/EDIT/SEND-stream. Plain EXTRA_TEXT stays unlinked. */
+    val fileBacked: Boolean = false,
 )
 
 object IncomingContent {
@@ -42,15 +44,15 @@ object IncomingContent {
         val extraText = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }
         if (extraText != null) {
             val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
-            return IncomingDocument(extraText, subject)
+            return IncomingDocument(extraText, subject, fileBacked = false)
         }
         val stream = streamUri(intent) ?: return null
-        return IncomingDocument(readUri(resolver, stream), displayName(resolver, stream))
+        return IncomingDocument(readUri(resolver, stream), displayName(resolver, stream), fileBacked = true)
     }
 
     private fun readView(intent: Intent, resolver: android.content.ContentResolver): IncomingDocument? {
         val uri = intent.data ?: streamUri(intent) ?: return null
-        return IncomingDocument(readUri(resolver, uri), displayName(resolver, uri))
+        return IncomingDocument(readUri(resolver, uri), displayName(resolver, uri), fileBacked = true)
     }
 
     private fun streamUri(intent: Intent): Uri? {

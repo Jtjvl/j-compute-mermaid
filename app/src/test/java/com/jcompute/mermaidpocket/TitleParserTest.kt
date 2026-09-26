@@ -19,6 +19,7 @@ class TitleParserTest {
     fun usesFileNameWhenNoComment() {
         val source = "flowchart TD\n    A --> B"
         assertEquals("order-flow", TitleParser.fromSource(source, fileName = "order-flow.mmd"))
+        assertEquals("order-flow", TitleParser.fromSource(source, fileName = "order-flow.txt"))
     }
 
     @Test

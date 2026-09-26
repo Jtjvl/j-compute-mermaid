@@ -20,7 +20,8 @@ class LibraryChildrenTest {
             LibraryChildRow("six.mmd", mimeType = null, lastModified = 6),
             LibraryChildRow("seven.mmd", mimeType = null, lastModified = 7),
             LibraryChildRow("notes.txt", mimeType = "text/plain", lastModified = 8),
-            LibraryChildRow("extra.mmd", mimeType = LibraryChildren.DIRECTORY_MIME, lastModified = 9),
+            LibraryChildRow("photo.png", mimeType = "image/png", lastModified = 9),
+            LibraryChildRow("extra.mmd", mimeType = LibraryChildren.DIRECTORY_MIME, lastModified = 10),
         )
         val isFileKeeps = rows.count { row ->
             LibraryChildren.documentFileIsFile(row.mimeType) &&
@@ -29,11 +30,22 @@ class LibraryChildrenTest {
         assertEquals(3, isFileKeeps)
 
         val listed = LibraryChildren.diagrams(rows)
-        assertEquals(7, listed.size)
+        assertEquals(8, listed.size)
         assertEquals(
-            listOf("one.mmd", "two.mmd", "three.mmd", "four.mmd", "five.mmd", "six.mmd", "seven.mmd"),
+            listOf(
+                "one.mmd",
+                "two.mmd",
+                "three.mmd",
+                "four.mmd",
+                "five.mmd",
+                "six.mmd",
+                "seven.mmd",
+                "notes.txt",
+            ),
             listed.map { it.name },
         )
+        assertFalse(listed.any { it.name == "photo.png" })
+        assertFalse(listed.any { it.name == "extra.mmd" })
     }
 
     @Test
@@ -41,9 +53,10 @@ class LibraryChildrenTest {
         val rows = listOf(
             LibraryChildRow(name = null, mimeType = null, documentId = "primary:Documents/MermaidPocket/from-id.mmd"),
             LibraryChildRow("Diagram.MMD", mimeType = "application/octet-stream"),
+            LibraryChildRow("older", mimeType = null),
         )
         assertEquals(
-            listOf("from-id.mmd", "Diagram.MMD"),
+            listOf("from-id.mmd", "Diagram.MMD", "older"),
             LibraryChildren.diagrams(rows).map { it.name },
         )
     }

@@ -1,7 +1,7 @@
 package com.jcompute.mermaidpocket.data
 
 /**
- * One `.mmd` side of a local-vs-folder compare.
+ * One diagram side of a local-vs-folder compare.
  * [modifiedAt] is the file timestamp. Equal text is left alone even when timestamps differ.
  */
 data class SyncFile(
@@ -27,8 +27,8 @@ data class SyncReport(val pushed: Int, val pulled: Int) {
  */
 object DiagramSyncPlan {
     fun plan(local: List<SyncFile>, remote: List<SyncFile>): List<SyncOp> {
-        val localBy = local.filter { it.name.endsWith(".mmd", ignoreCase = true) }.associateBy { it.name }
-        val remoteBy = remote.filter { it.name.endsWith(".mmd", ignoreCase = true) }.associateBy { it.name }
+        val localBy = local.filter { LibraryMembership.isDiagramFileName(it.name) }.associateBy { it.name }
+        val remoteBy = remote.filter { LibraryMembership.isDiagramFileName(it.name) }.associateBy { it.name }
         return (localBy.keys + remoteBy.keys).sorted().mapNotNull { name ->
             val left = localBy[name]
             val right = remoteBy[name]
@@ -49,7 +49,7 @@ data class RemoteFile(
     val relativePath: String = name,
 )
 
-/** Folder of `.mmd` files outside app-private storage. */
+/** Folder of diagram files outside app-private storage. */
 interface RemoteDiagrams {
     fun list(): List<RemoteFile>
     fun read(name: String): String
@@ -199,7 +199,7 @@ class DiagramSync(
 
     /**
      * Pull and push by file name. Diagrams that share a title stay separate rows
-     * when their `.mmd` names differ.
+     * when their file names differ.
      */
     fun reconcile(): SyncReport {
         val remote = remoteProvider() ?: return SyncReport(0, 0)

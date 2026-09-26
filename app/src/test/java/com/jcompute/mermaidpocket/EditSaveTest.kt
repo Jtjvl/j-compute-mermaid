@@ -204,6 +204,30 @@ class EditSaveTest {
     }
 
     @Test
+    fun openTxtLinksAndSaveOverwritesThatSameFile() {
+        val source = "%% Checkout\nflowchart TD\n  A-->B"
+        val written = sync.linkOpened("foo.txt", source)
+        val link = EditorLink.stored(written.file, source)
+        assertEquals("foo.txt", link.currentFile!!.name)
+        assertEquals("foo.txt", EditorUiState(currentFile = link.currentFile, source = link.source).fileName)
+        assertEquals("Checkout", link.title)
+        assertFalse(link.currentFile!!.name.endsWith(".mmd"))
+
+        val saved = LibrarySave.commit(
+            sync = sync,
+            currentFile = link.currentFile,
+            title = link.title,
+            source = "%% Checkout\nflowchart TD\n  A-->C",
+        )
+        assertEquals(written.file.canonicalPath, saved.file.canonicalPath)
+        assertEquals("foo.txt", saved.file.name)
+        assertEquals("%% Checkout\nflowchart TD\n  A-->C", written.file.readText())
+        assertEquals(listOf("foo.txt"), store.list().map { it.name })
+        assertFalse(File(root, "diagrams/foo.txt.mmd").exists())
+        assertFalse(File(root, "diagrams/foo.mmd").exists())
+    }
+
+    @Test
     fun openExternalLinksAndSaveOverwritesThatFile() {
         val source = "%% Checkout\nflowchart TD\n  A-->B"
         val written = sync.linkOpened("order-flow.mmd", source)
@@ -273,6 +297,7 @@ class EditSaveTest {
         val intent = model.substringAfter("fun handleIntent").substringBefore("fun openStored")
         assertTrue(intent.contains("openImported"))
         assertTrue(intent.contains("ingest("))
+        assertTrue(intent.contains("document.fileBacked"))
         val openStored = model.substringAfter("fun openStored").substringBefore("fun openImported")
         assertTrue(openStored.contains("EditorLink.stored"))
         assertTrue(openStored.contains("applyLink"))

@@ -262,7 +262,7 @@ class EditorViewModel(
     /**
      * Paste and share-of-text replace the buffer and drop [EditorUiState.currentFile].
      * Save then creates a new library file instead of overwriting the previously linked one.
-     * Open… / Open-with of a `.mmd` go through [openImported] and stay linked.
+     * Open… / Open-with of a diagram file go through [openImported] and stay linked.
      */
     fun ingest(text: String, fileName: String? = null) {
         val link = EditorLink.imported(text, fileName)
@@ -291,7 +291,7 @@ class EditorViewModel(
                 notify(error.message ?: "Could not open that content.")
                 return@launch
             } ?: return@launch
-            if (LibraryOpen.candidateName(document.displayName) != null) {
+            if (document.fileBacked && LibraryOpen.candidateName(document.displayName) != null) {
                 openImported(document.text, document.displayName)
             } else {
                 ingest(document.text, fileName = document.displayName)
@@ -307,9 +307,9 @@ class EditorViewModel(
     }
 
     /**
-     * Open a `.mmd` from the picker or a file manager. Links it into the library
-     * (copy or reuse the working copy) so Files shows an Open marker and Save
-     * overwrites that file. Blank / New / paste stay unlinked.
+     * Open a diagram from the picker or a file manager. Links it into the library
+     * under its real name (copy or reuse the working copy) so Files shows an Open
+     * marker and Save overwrites that file. Blank / New / paste stay unlinked.
      */
     fun openImported(text: String, fileName: String?, underLibrary: Boolean = false) {
         viewModelScope.launch {
