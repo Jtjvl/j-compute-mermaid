@@ -1,8 +1,10 @@
 package com.jcompute.mermaidpocket.ui
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,10 +41,12 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -72,6 +76,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,9 +100,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jcompute.mermaidpocket.R
+import com.jcompute.mermaidpocket.ai.VoiceCapture
 import com.jcompute.mermaidpocket.data.Appearance
 import com.jcompute.mermaidpocket.data.DiagramTheme
 import com.jcompute.mermaidpocket.data.DurableDocuments
@@ -125,6 +134,44 @@ fun MermaidAppRoot(
 
     var libraryOpenRows by remember { mutableStateOf<List<RemoteFile>>(emptyList()) }
     var showLibraryOpen by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+
+    val voiceCapture = remember {
+        VoiceCapture(
+            context,
+            onListening = { viewModel.onVoiceListening() },
+            onPartial = { viewModel.onVoicePartial(it) },
+            onTranscript = { viewModel.onVoiceTranscript(it) },
+            onError = { viewModel.onVoiceError(it) },
+        )
+    }
+    DisposableEffect(voiceCapture) {
+        onDispose { voiceCapture.destroy() }
+    }
+
+    fun startVoiceCapture() {
+        if (!state.aiEnabled) {
+            viewModel.notify(state.voiceControlDescription)
+            return
+        }
+        voiceCapture.start()
+    }
+
+    val recordAudio = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) startVoiceCapture() else viewModel.notify("Microphone permission is required.")
+    }
+
+    fun onMic() {
+        if (!state.aiEnabled) {
+            viewModel.notify(state.voiceControlDescription)
+            return
+        }
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) startVoiceCapture() else recordAudio.launch(Manifest.permission.RECORD_AUDIO)
+    }
 
     val openDocument = rememberLauncherForActivityResult(
         OpenDiagramContract { viewModel.suggestedDiagramFolder() },
@@ -247,6 +294,9 @@ fun MermaidAppRoot(
     BackHandler(enabled = hideChrome) {
         viewModel.exitImmersiveView()
     }
+    BackHandler(enabled = showSettings) {
+        showSettings = false
+    }
 
     Scaffold(
         contentWindowInsets = if (hideChrome) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
@@ -264,11 +314,13 @@ fun MermaidAppRoot(
                         onDiagramFolder = { chooseDiagramFolder.launch(viewModel.suggestedDiagramFolder()) },
                         onAppearance = viewModel::setAppearance,
                         onDiagramTheme = viewModel::setDiagramTheme,
+                        onSettings = { showSettings = true },
                     )
                 } else {
                     DocumentTopBar(
                         state = state,
                         onPaste = ::paste,
+                        onMic = ::onMic,
                         onCopyAll = viewModel::copyAllSource,
                         onUndo = viewModel::undo,
                         onRedo = viewModel::redo,
@@ -281,6 +333,7 @@ fun MermaidAppRoot(
                         onAppearance = viewModel::setAppearance,
                         onDiagramTheme = viewModel::setDiagramTheme,
                         onNew = viewModel::newDiagram,
+                        onSettings = { showSettings = true },
                     )
                 }
             }
@@ -460,6 +513,42 @@ fun MermaidAppRoot(
             onDismiss = { confirmBulkDelete = false },
         )
     }
+
+    if (state.voice.sheetVisible) {
+        VoiceTranscriptSheet(
+            transcript = state.voice.transcript,
+            listening = state.voice.listening,
+            sending = state.voice.sending,
+            onTranscriptChange = viewModel::setVoiceTranscript,
+            onSend = viewModel::sendVoiceTranscript,
+            onRetry = {
+                viewModel.setVoiceTranscript("")
+                onMic()
+            },
+            onDismiss = {
+                voiceCapture.cancel()
+                viewModel.dismissVoiceSheet()
+            },
+        )
+    }
+
+    if (showSettings) {
+        Dialog(
+            onDismissRequest = { showSettings = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                SettingsScreen(
+                    initial = viewModel.loadAiConfig(),
+                    onSave = viewModel::saveAiConfig,
+                    onBack = { showSettings = false },
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -467,6 +556,7 @@ fun MermaidAppRoot(
 private fun DocumentTopBar(
     state: EditorUiState,
     onPaste: () -> Unit,
+    onMic: () -> Unit,
     onCopyAll: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -479,6 +569,7 @@ private fun DocumentTopBar(
     onAppearance: (Appearance) -> Unit,
     onDiagramTheme: (DiagramTheme) -> Unit,
     onNew: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val editing = state.mode == EditorMode.Edit && state.screen == Screen.Document
     TopAppBar(
@@ -495,6 +586,12 @@ private fun DocumentTopBar(
         actions = {
             IconButton(onClick = onPaste) {
                 Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste")
+            }
+            IconButton(
+                onClick = onMic,
+                enabled = state.aiEnabled,
+            ) {
+                Icon(Icons.Outlined.Mic, contentDescription = state.voiceControlDescription)
             }
             if (editing) {
                 IconButton(onClick = onCopyAll) {
@@ -535,6 +632,7 @@ private fun DocumentTopBar(
                 onDiagramTheme = onDiagramTheme,
                 onSave = onSave,
                 onShare = onShare,
+                onSettings = onSettings,
             )
         },
     )
@@ -555,6 +653,7 @@ internal fun PocketOverflowMenu(
     onDiagramTheme: (DiagramTheme) -> Unit,
     onSave: () -> Unit = {},
     onShare: () -> Unit = {},
+    onSettings: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var aboutOpen by remember { mutableStateOf(false) }
@@ -603,6 +702,14 @@ internal fun PocketOverflowMenu(
                 onClick = {
                     menuOpen = false
                     onDiagramFolder()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onSettings()
                 },
             )
             HorizontalDivider()

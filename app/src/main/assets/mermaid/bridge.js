@@ -43,6 +43,16 @@
     }
   }
 
+  function notifyParse(ok, error) {
+    try {
+      if (window.MermaidBridge) {
+        window.MermaidBridge.onParsed(!!ok, error || "");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   function show(which) {
     emptyEl.style.display = which === "empty" ? "block" : "none";
     errorEl.style.display = which === "error" ? "block" : "none";
@@ -331,6 +341,44 @@
       errorEl.textContent = message;
       show("error");
       notify(false, message, 0, 0);
+    }
+  };
+
+  window.parseDiagram = function (source, theme) {
+    const resolved = COLOR_THEMES[theme] ? theme : "redux-color";
+    try {
+      configure(resolved);
+    } catch (err) {
+      notifyParse(false, String(err && err.message ? err.message : err));
+      return;
+    }
+    const text = (source || "").trim();
+    if (!text) {
+      notifyParse(false, "Empty diagram.");
+      return;
+    }
+    const fail = function (err) {
+      const message =
+        (err && (err.str || err.message)) || String(err) || "Could not parse diagram.";
+      notifyParse(false, message);
+    };
+    try {
+      if (typeof mermaid.parse === "function") {
+        Promise.resolve(mermaid.parse(text))
+          .then(function () {
+            notifyParse(true, "");
+          })
+          .catch(fail);
+        return;
+      }
+      mermaid
+        .render("parse-" + Date.now(), text)
+        .then(function () {
+          notifyParse(true, "");
+        })
+        .catch(fail);
+    } catch (err) {
+      fail(err);
     }
   };
 

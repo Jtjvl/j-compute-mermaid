@@ -1,6 +1,7 @@
 package com.jcompute.mermaidpocket.data
 
 import android.content.Context
+import com.jcompute.mermaidpocket.ai.AiDefaults
 import com.jcompute.mermaidpocket.export.ExportSize
 
 enum class Appearance {
@@ -98,10 +99,32 @@ class AppSettings(context: Context) {
         prefs.edit().putString(KEY_DIAGRAM_TREE, value).apply()
     }
 
+    fun chatModel(): String {
+        return prefs.getString(KEY_CHAT_MODEL, null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: AiDefaults.CHAT_MODEL
+    }
+
+    fun setChatModel(value: String) {
+        val stored = value.trim().ifEmpty { AiDefaults.CHAT_MODEL }
+        prefs.edit().putString(KEY_CHAT_MODEL, stored).apply()
+    }
+
+    fun classifierModel(): String {
+        return prefs.getString(KEY_CLASSIFIER_MODEL, null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: AiDefaults.CLASSIFIER_MODEL
+    }
+
+    fun setClassifierModel(value: String) {
+        val stored = value.trim().ifEmpty { AiDefaults.CLASSIFIER_MODEL }
+        prefs.edit().putString(KEY_CLASSIFIER_MODEL, stored).apply()
+    }
+
     private companion object {
         const val KEY_APPEARANCE = "appearance"
         const val KEY_DIAGRAM_THEME = "diagram_theme"
         const val KEY_EXPORT_WIDTH = "export_width"
         const val KEY_DIAGRAM_TREE = "diagram_tree_uri"
+        const val KEY_CHAT_MODEL = "chat_model"
+        const val KEY_CLASSIFIER_MODEL = "classifier_model"
     }
 }

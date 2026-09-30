@@ -10,6 +10,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.jcompute.mermaidpocket.MermaidApp
+import com.jcompute.mermaidpocket.ai.AgentOutcome
+import com.jcompute.mermaidpocket.ai.AgentRequest
+import com.jcompute.mermaidpocket.ai.AiAvailability
+import com.jcompute.mermaidpocket.ai.AiConfig
+import com.jcompute.mermaidpocket.ai.AiSecrets
+import com.jcompute.mermaidpocket.ai.BraveSearchClient
+import com.jcompute.mermaidpocket.ai.DiagramAgent
+import com.jcompute.mermaidpocket.ai.JevClassifier
+import com.jcompute.mermaidpocket.ai.JsonHttp
+import com.jcompute.mermaidpocket.ai.NetworkStatus
+import com.jcompute.mermaidpocket.ai.OpenRouterClient
+import com.jcompute.mermaidpocket.ai.RendererMermaidValidator
+import com.jcompute.mermaidpocket.ai.UrlJsonHttp
 import com.jcompute.mermaidpocket.data.Appearance
 import com.jcompute.mermaidpocket.data.AppSettings
 import com.jcompute.mermaidpocket.data.DiagramTheme
@@ -28,6 +41,7 @@ import com.jcompute.mermaidpocket.intent.IncomingContent
 import com.jcompute.mermaidpocket.render.MermaidRendererController
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -41,6 +55,13 @@ import kotlinx.coroutines.withContext
 enum class EditorMode { Edit, View }
 
 enum class Screen { Files, Document }
+
+data class VoiceUiState(
+    val listening: Boolean = false,
+    val sheetVisible: Boolean = false,
+    val transcript: String = "",
+    val sending: Boolean = false,
+)
 
 data class EditorUiState(
     val screen: Screen = Screen.Document,
@@ -65,9 +86,15 @@ data class EditorUiState(
     val diagramHeight: Int = 0,
     val libraryDurable: Boolean = false,
     val askForDiagramFolder: Boolean = false,
+    val hasNetwork: Boolean = false,
+    val hasOpenRouterKey: Boolean = false,
+    val voice: VoiceUiState = VoiceUiState(),
 ) {
     val isDirty: Boolean get() = source != savedSource
     val fileName: String get() = currentFile?.name ?: "Untitled.mmd"
+    val aiEnabled: Boolean get() = AiAvailability.voiceEnabled(hasOpenRouterKey, hasNetwork)
+    val voiceControlDescription: String
+        get() = AiAvailability.disabledReason(hasOpenRouterKey, hasNetwork) ?: "Voice to diagram"
 }
 
 sealed interface UiEvent {
@@ -80,10 +107,17 @@ class EditorViewModel(
     private val sync: DiagramSync,
     private val durable: DurableDocuments,
     private val settings: AppSettings,
+    private val secrets: AiSecrets,
     private val exportWriter: ExportWriter = ExportWriter(application),
+    http: JsonHttp = UrlJsonHttp(),
 ) : AndroidViewModel(application) {
 
     val renderer = MermaidRendererController()
+
+    private val openRouter = OpenRouterClient(http)
+    private val search = BraveSearchClient(http)
+    private val validator = RendererMermaidValidator(renderer) { _state.value.diagramTheme.mermaidId }
+    private val agent = DiagramAgent(openRouter, search, validator)
 
     private val _state = MutableStateFlow(
         EditorUiState(
@@ -91,6 +125,8 @@ class EditorViewModel(
             diagramTheme = settings.diagramTheme(),
             libraryDurable = sync.isDurable,
             askForDiagramFolder = !sync.isDurable,
+            hasNetwork = NetworkStatus.isOnline(application),
+            hasOpenRouterKey = secrets.openRouterKey().isNotBlank(),
         ),
     )
     val state: StateFlow<EditorUiState> = _state.asStateFlow()
@@ -99,9 +135,16 @@ class EditorViewModel(
     val events: SharedFlow<UiEvent> = _events.asSharedFlow()
 
     private val history = SourceHistory()
+    private var voiceJob: Job? = null
+    private var aiApplyEpoch: Long? = null
 
     init {
         refreshFiles()
+        viewModelScope.launch {
+            NetworkStatus.onlineFlow(getApplication()).collect { online ->
+                _state.update { it.copy(hasNetwork = online) }
+            }
+        }
     }
 
     fun onSourceChange(value: String) {
@@ -198,6 +241,13 @@ class EditorViewModel(
     fun onRenderResult(ok: Boolean, error: String, width: Int = 0, height: Int = 0) {
         renderer.markRendered(ok, error)
         if (!ok) {
+            val pendingAi = aiApplyEpoch != null && _state.value.renderEpoch == aiApplyEpoch
+            aiApplyEpoch = null
+            if (pendingAi && history.canUndo) {
+                undo()
+                notify("Diagram was invalid. Last good version kept.")
+                return
+            }
             _state.update {
                 it.copy(
                     isRendering = false,
@@ -209,6 +259,7 @@ class EditorViewModel(
             }
             return
         }
+        aiApplyEpoch = null
         _state.update {
             it.copy(
                 isRendering = false,
@@ -675,10 +726,135 @@ class EditorViewModel(
         return TitleParser.fromSource(source, fileName = fileName, fallback = "Untitled")
     }
 
+    fun loadAiConfig(): AiConfig {
+        return AiConfig(
+            openRouterKey = secrets.openRouterKey(),
+            braveSearchKey = secrets.braveSearchKey(),
+            chatModel = settings.chatModel(),
+            classifierModel = settings.classifierModel(),
+        )
+    }
+
+    fun saveAiConfig(config: AiConfig) {
+        secrets.setOpenRouterKey(config.openRouterKey)
+        secrets.setBraveSearchKey(config.braveSearchKey)
+        settings.setChatModel(config.chatModel)
+        settings.setClassifierModel(config.classifierModel)
+        _state.update { it.copy(hasOpenRouterKey = config.hasOpenRouterKey) }
+    }
+
+    fun onVoiceListening() {
+        _state.update {
+            it.copy(voice = it.voice.copy(listening = true, sheetVisible = true, sending = false))
+        }
+    }
+
+    fun onVoicePartial(text: String) {
+        if (text.isBlank()) return
+        _state.update {
+            it.copy(voice = it.voice.copy(transcript = text, listening = true, sheetVisible = true))
+        }
+    }
+
+    fun onVoiceTranscript(text: String) {
+        _state.update {
+            it.copy(
+                voice = it.voice.copy(
+                    transcript = text,
+                    listening = false,
+                    sheetVisible = true,
+                    sending = false,
+                ),
+            )
+        }
+    }
+
+    fun onVoiceError(message: String) {
+        _state.update { it.copy(voice = it.voice.copy(listening = false)) }
+        notify(message)
+    }
+
+    fun setVoiceTranscript(text: String) {
+        _state.update { it.copy(voice = it.voice.copy(transcript = text)) }
+    }
+
+    fun dismissVoiceSheet() {
+        if (_state.value.voice.sending) return
+        voiceJob?.cancel()
+        _state.update { it.copy(voice = VoiceUiState()) }
+    }
+
+    fun sendVoiceTranscript() {
+        val snapshot = _state.value
+        val transcript = snapshot.voice.transcript.trim()
+        if (transcript.isEmpty() || snapshot.voice.sending) return
+        if (!snapshot.aiEnabled) {
+            notify(snapshot.voiceControlDescription)
+            return
+        }
+        voiceJob?.cancel()
+        voiceJob = viewModelScope.launch {
+            _state.update { it.copy(voice = it.voice.copy(sending = true, listening = false)) }
+            val config = loadAiConfig()
+            val current = _state.value.source
+            val strategy = runCatching {
+                openRouter.classify(
+                    apiKey = config.openRouterKey,
+                    model = config.classifierModel,
+                    transcript = transcript,
+                    currentSource = current,
+                )
+            }.getOrNull() ?: JevClassifier.heuristic(transcript, current)
+            val outcome = agent.run(
+                AgentRequest(
+                    transcript = transcript,
+                    currentSource = current,
+                    strategy = strategy,
+                    chatModel = config.chatModel,
+                    apiKey = config.openRouterKey,
+                    searchKey = config.braveSearchKey,
+                ),
+            )
+            when (outcome) {
+                is AgentOutcome.Applied -> {
+                    applyAiSource(outcome.source)
+                    notify("Diagram updated")
+                }
+                is AgentOutcome.Invalid -> {
+                    _state.update { it.copy(voice = it.voice.copy(sending = false)) }
+                    notify("Diagram was invalid. Last good version kept.")
+                }
+                is AgentOutcome.Failed -> {
+                    _state.update { it.copy(voice = it.voice.copy(sending = false)) }
+                    notify(outcome.message)
+                }
+            }
+        }
+    }
+
+    private fun applyAiSource(source: String) {
+        history.checkpoint(source, System.currentTimeMillis())
+        _state.update {
+            val pass = RenderPass.next(it.renderEpoch, source)
+            aiApplyEpoch = pass.epoch
+            it.copy(
+                source = source,
+                title = displayTitle(source, it.currentFile?.name),
+                renderEpoch = pass.epoch,
+                isRendering = pass.showSpinner && it.mode == EditorMode.View,
+                previewPng = null,
+                renderError = null,
+                canUndo = history.canUndo,
+                canRedo = history.canRedo,
+                voice = VoiceUiState(),
+            )
+        }
+    }
+
     class Factory(private val app: MermaidApp) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             @Suppress("UNCHECKED_CAST")
-            return EditorViewModel(app, app.sync, app.durable, app.settings) as T
+            return EditorViewModel(app, app.sync, app.durable, app.settings, app.aiSecrets) as T
         }
     }
 }

@@ -48,8 +48,9 @@ PNG and JPEG ask for a **width** (slider, or an exact pixel value) on that same 
 - **Copy image** to the clipboard
 - **Save** and **Share**, then PNG, SVG, JPEG, or `.mmd`
 - **Files** with thumbnails; long-press to multi-select and bulk-delete; swipe deletes one file
+- Optional **voice → diagram** AI (OpenRouter + Android SpeechRecognizer). Core editor stays offline. No ads. No required accounts.
 
-No accounts, sync, or network. The manifest does not request `INTERNET`.
+Editing, paste, Files, and export do not need a network. The renderer WebView still blocks network loads. `INTERNET` is declared so optional AI can call OpenRouter and Brave Search when you send a transcript. `RECORD_AUDIO` is requested when you tap the mic.
 
 ## Diagrams survive uninstall
 
@@ -68,7 +69,7 @@ Auto Backup still covers the working copy and preferences:
 - Android 11 and lower: `res/xml/backup_rules.xml`
 - Android 12+: `res/xml/data_extraction_rules.xml` (cloud backup and device-to-device)
 
-Both include `filesDir` and shared preferences (appearance, diagram theme, last export width, folder grant) and exclude `diagrams/.thumbs`, so preview PNGs do not consume the 25 MB cloud quota. Clipboard and share-sheet files live in `cacheDir` and are not backed up. The grant itself does not survive uninstall; the `.mmd` files in `Documents/MermaidPocket` do.
+Both include `filesDir` and shared preferences (appearance, diagram theme, last export width, folder grant, AI model ids) and exclude `diagrams/.thumbs` plus `mermaid_ai_secrets.xml` (OpenRouter / Brave keys). Clipboard and share-sheet files live in `cacheDir` and are not backed up. The grant itself does not survive uninstall; the `.mmd` files in `Documents/MermaidPocket` do.
 
 ## Build
 
@@ -94,11 +95,11 @@ Product name: **MermaidPocket**
 
 Summary:
 
-Private, offline Mermaid diagram editor for your phone. No ads, no accounts, no network.
+Private Mermaid editor. Offline by default; optional AI needs your keys.
 
 Longer description:
 
-Edit and view Mermaid diagram syntax on-device. Paste from chat, pinch-zoom the diagram, save .mmd locally. Fully offline. No ads, no tracking.
+Edit and view Mermaid diagram syntax on-device. Paste from chat, pinch-zoom the diagram, save .mmd locally. Editing is offline. Optional voice-to-diagram AI uses your own OpenRouter key (and optional Brave Search key). No ads, no tracking, no required accounts.
 
 The same Summary is in `fastlane/metadata/android/en-US/short_description.txt`. A metadata merge request can follow once this repository is public. This tree does not ship `metadata/*.yml`.
 
@@ -135,6 +136,23 @@ app/src/main/assets/mermaid/
 - `DiagramStore` is a list of real diagram files, not a JSON recents log
 - Chrome is Material 3; the diagram canvas is the hero
 
+## Optional AI (voice → diagram)
+
+Off by default. Overflow → **Settings** → **AI**. Keys never go in plaintext `mermaid` prefs; they live in `EncryptedSharedPreferences` (`mermaid_ai_secrets`) backed by the Android Keystore, and that file is excluded from backup.
+
+| Field | Purpose |
+| --- | --- |
+| OpenRouter API key | Required to Send a transcript. [openrouter.ai](https://openrouter.ai/) |
+| Chat model | OpenAI-compatible model id. Default `openai/gpt-4o-mini` |
+| Classifier model | TypeSafe **Jev** on OpenRouter Decisions API. Default `typesafe/jev-1.13` (`POST /api/alpha/decisions`). Alias `~typesafe/jev-latest` tracks latest |
+| Brave Search API key | Optional `web_lookup`. JSON `GET https://api.search.brave.com/res/v1/web/search` with `X-Subscription-Token`. [Brave Search API](https://brave.com/search/api/) |
+
+Flow on **Edit** and **View**: tap mic (disabled copy: **Needs network + OpenRouter key**) → Android `SpeechRecognizer` one-shot → bottom sheet with an editable transcript → **Send** or **Retry**. There is no persistent chat panel.
+
+After Send: Jev chooses patch vs rewrite, then the chat model may call `get_diagram`, `set_diagram`, and `web_lookup`. MermaidPocket parses with the bundled mermaid.js renderer before apply. Valid source is applied (on the Edit undo stack). Invalid source toasts **Diagram was invalid. Last good version kept.**
+
+Manual test with real keys: [`docs/ai.md`](docs/ai.md).
+
 ## Device smoke
 
 No emulator in this environment. On a phone:
@@ -144,6 +162,7 @@ No emulator in this environment. On a phone:
 3. Files: thumbnail after View, long-press bulk delete, swipe one row, share icon.
 4. Overflow: one **Save** and one **Share**. Each opens PNG, SVG, JPEG, and `.mmd`. PNG/JPEG show the width slider and a size estimate. Save of PNG, JPEG, and SVG opens the system picker. Share opens the Android share sheet. Copy all and Copy image still copy without that dialog.
 5. Save a `.mmd`, uninstall `com.jcompute.mermaidpocket`, reinstall it, choose `Documents/MermaidPocket` again, and confirm the file is listed.
+6. Without a key: Edit and View still show a disabled mic (`Needs network + OpenRouter key`). Settings → AI stores a key; with network, Send a transcript of a layout tweak and confirm the diagram updates. Send junk Mermaid via a forced invalid path (see `docs/ai.md`) and confirm last-good is kept.
 
 ## License notes
 

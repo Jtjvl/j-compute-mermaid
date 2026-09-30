@@ -15,6 +15,7 @@ class BackupRulesTest {
             assertTrue(text.contains("path=\".\""))
             assertTrue(text.contains("diagrams/.thumbs"))
             assertTrue(text.contains("sharedpref"))
+            assertTrue(text.contains("mermaid_ai_secrets.xml"))
             assertTrue(!text.contains("domain=\"external\""))
         }
         assertTrue(cloud.contains("<cloud-backup>"))

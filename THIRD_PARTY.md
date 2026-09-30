@@ -33,3 +33,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## AndroidX Security (EncryptedSharedPreferences)
+
+- Artifact: `androidx.security:security-crypto:1.0.0`
+- License: Apache-2.0
+- Stores optional OpenRouter and Brave Search API keys.
+
+Tink is a transitive dependency of that artifact (Apache-2.0).
+
