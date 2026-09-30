@@ -2,7 +2,7 @@
 <!--
   Android 12+ cloud backup and device-to-device transfer.
   Same contract as backup_rules.xml: keep .mmd files and settings,
-  skip preview PNGs under diagrams/.thumbs.
+  skip preview PNGs under diagrams/.thumbs, skip encrypted AI keys.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -15,6 +15,9 @@
         <include
             domain="sharedpref"
             path="." />
+        <exclude
+            domain="sharedpref"
+            path="mermaid_ai_secrets.xml" />
     </cloud-backup>
     <device-transfer>
         <include
@@ -26,5 +29,8 @@
         <include
             domain="sharedpref"
             path="." />
+        <exclude
+            domain="sharedpref"
+            path="mermaid_ai_secrets.xml" />
     </device-transfer>
 </data-extraction-rules>

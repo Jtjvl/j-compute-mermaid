@@ -2,6 +2,15 @@
 
 User-facing releases only. See [VERSIONING.md](VERSIONING.md).
 
+## 0.4.0
+
+- Optional voice → diagram AI (Architecture B thin agent). Editing stays fully offline
+- Settings: OpenRouter key, Brave Search key (EncryptedSharedPreferences / Android Keystore), chat model, Jev classifier model
+- Edit and View show a mic (visible but disabled without network + OpenRouter key)
+- One-shot SpeechRecognizer → editable transcript → Send or Retry (no chat panel)
+- Jev classifies patch vs rewrite; chat tools `get_diagram`, `set_diagram`, `web_lookup`; mermaid.js validates before apply
+- Invalid diagrams toast and keep last-good (undo)
+
 ## 0.3.5
 
 - Open, list, and save any readable text diagram (not `.mmd`-only)

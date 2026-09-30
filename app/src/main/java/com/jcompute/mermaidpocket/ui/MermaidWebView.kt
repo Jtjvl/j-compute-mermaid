@@ -31,6 +31,7 @@ fun MermaidEngine(
             onReady = { controller.markReady() },
             onRendered = { ok, error, width, height -> onRendered(ok, error, width, height) },
             onExport = { kind, payload -> controller.deliverExport(kind, payload) },
+            onParsed = { ok, error -> controller.deliverParse(ok, error) },
         )
     }
 

@@ -1,1 +1,1 @@
-Private, offline Mermaid diagram editor for your phone. No ads, no accounts, no network.
+Private Mermaid editor. Offline by default; optional AI needs your keys.

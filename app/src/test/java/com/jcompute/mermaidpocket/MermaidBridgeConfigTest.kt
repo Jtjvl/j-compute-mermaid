@@ -41,6 +41,16 @@ class MermaidBridgeConfigTest {
     }
 
     @Test
+    fun parseDiagramDoesNotPaintTheCanvas() {
+        val js = bridge()
+        assertTrue(js.contains("window.parseDiagram"))
+        assertTrue(js.contains("function notifyParse"))
+        val parse = js.substringAfter("window.parseDiagram = function").substringBefore("window.exportSvg")
+        assertTrue(parse.contains("mermaid.parse"))
+        assertFalse(parse.contains("presentSuccess"))
+    }
+
+    @Test
     fun rasterExportIsSeparateFromClipboardPngScale() {
         val js = bridge()
         assertTrue(js.contains("window.exportPng"))

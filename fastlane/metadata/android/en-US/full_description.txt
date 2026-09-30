@@ -1,1 +1,1 @@
-Edit and view Mermaid diagram syntax on-device. Paste from chat, pinch-zoom the diagram, save .mmd locally. Fully offline. No ads, no tracking.
+Edit and view Mermaid diagram syntax on-device. Paste from chat, pinch-zoom the diagram, save .mmd locally. Editing is offline. Optional voice-to-diagram AI uses your own OpenRouter key (and optional Brave Search key). No ads, no tracking, no required accounts.

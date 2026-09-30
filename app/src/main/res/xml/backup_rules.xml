@@ -3,6 +3,7 @@
   Android 11 and lower full-backup rules.
   Include app-private files (diagrams/*.mmd) and preferences.
   Exclude regenerable thumbnails so they do not consume the 25 MB cloud quota.
+  Exclude mermaid_ai_secrets.xml — OpenRouter/Brave keys live in EncryptedSharedPreferences / Keystore and must not leave the device.
   cache/ (clipboard PNGs) is excluded by the platform.
 -->
 <full-backup-content>
@@ -15,4 +16,7 @@
     <include
         domain="sharedpref"
         path="." />
+    <exclude
+        domain="sharedpref"
+        path="mermaid_ai_secrets.xml" />
 </full-backup-content>

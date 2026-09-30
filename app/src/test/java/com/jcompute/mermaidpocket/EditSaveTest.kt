@@ -312,6 +312,7 @@ class EditSaveTest {
         assertTrue(overflow.contains("onNew()"))
         assertTrue(overflow.contains("Text(\"Open…\")"))
         assertTrue(overflow.contains("Text(\"Diagram folder…\")"))
+        assertTrue(overflow.contains("Text(\"Settings\")"))
         assertTrue(overflow.contains("stringResource(R.string.about)"))
         assertTrue(overflow.contains("Diagram:"))
         assertTrue(overflow.contains("Chrome:"))

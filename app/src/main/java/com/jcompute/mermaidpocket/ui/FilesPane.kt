@@ -78,6 +78,7 @@ fun FilesTopBar(
     onDiagramFolder: () -> Unit,
     onAppearance: (Appearance) -> Unit,
     onDiagramTheme: (DiagramTheme) -> Unit,
+    onSettings: () -> Unit = {},
 ) {
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -119,6 +120,7 @@ fun FilesTopBar(
                     onDiagramFolder = onDiagramFolder,
                     onAppearance = onAppearance,
                     onDiagramTheme = onDiagramTheme,
+                    onSettings = onSettings,
                 )
             }
         },

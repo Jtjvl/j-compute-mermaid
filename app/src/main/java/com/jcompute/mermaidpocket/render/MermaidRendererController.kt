@@ -18,6 +18,7 @@ class MermaidRendererController {
     private var lastError: String? = null
     private val pending = ArrayDeque<() -> Unit>()
     private val exportWaiters = ArrayDeque<(Result<Pair<String, String>>) -> Unit>()
+    private val parseWaiters = ArrayDeque<(Result<Unit>) -> Unit>()
 
     fun attach(view: WebView) {
         ready = RendererAttach.isReady(sameView = webView === view, previouslyReady = ready)
@@ -51,6 +52,41 @@ class MermaidRendererController {
             waiter(Result.failure(IllegalStateException(payload.ifBlank { "Export failed." })))
         } else {
             waiter(Result.success(kind to payload))
+        }
+    }
+
+    fun deliverParse(ok: Boolean, error: String) {
+        val waiter = synchronized(parseWaiters) {
+            if (parseWaiters.isEmpty()) null else parseWaiters.removeFirst()
+        } ?: return
+        if (ok) {
+            waiter(Result.success(Unit))
+        } else {
+            waiter(Result.failure(IllegalArgumentException(error.ifBlank { "Invalid Mermaid." })))
+        }
+    }
+
+    /**
+     * Parse-only check. Does not replace the on-screen SVG (verify-before-apply).
+     */
+    suspend fun parse(source: String, mermaidTheme: String): Result<Unit> {
+        return suspendCancellableCoroutine { cont ->
+            val waiter: (Result<Unit>) -> Unit = { result ->
+                if (cont.isActive) cont.resume(result)
+            }
+            synchronized(parseWaiters) { parseWaiters.addLast(waiter) }
+            cont.invokeOnCancellation {
+                synchronized(parseWaiters) { parseWaiters.remove(waiter) }
+            }
+            runWhenReady {
+                val view = webView
+                if (view == null) {
+                    deliverParse(false, "Renderer is not ready.")
+                    return@runWhenReady
+                }
+                val script = "parseDiagram(${JSONObject.quote(source)}, ${JSONObject.quote(mermaidTheme)});"
+                view.evaluateJavascript(script, null)
+            }
         }
     }
 
