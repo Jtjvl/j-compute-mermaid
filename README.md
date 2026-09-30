@@ -138,7 +138,7 @@ app/src/main/assets/mermaid/
 
 ## Optional AI (voice → diagram)
 
-Off by default. Overflow → **Settings** → **AI**. Keys never go in plaintext `mermaid` prefs; they live in `EncryptedSharedPreferences` (`mermaid_ai_secrets`) backed by the Android Keystore, and that file is excluded from backup.
+Off by default. Overflow → **Settings** → **Voice & AI**. Keys never go in plaintext `mermaid` prefs; they live in `EncryptedSharedPreferences` (`mermaid_ai_secrets`) backed by the Android Keystore, and that file is excluded from backup.
 
 | Field | Purpose |
 | --- | --- |
@@ -147,7 +147,7 @@ Off by default. Overflow → **Settings** → **AI**. Keys never go in plaintext
 | Classifier model | TypeSafe **Jev** on OpenRouter Decisions API. Default `typesafe/jev-1.13` (`POST /api/alpha/decisions`). Alias `~typesafe/jev-latest` tracks latest |
 | Brave Search API key | Optional `web_lookup`. JSON `GET https://api.search.brave.com/res/v1/web/search` with `X-Subscription-Token`. [Brave Search API](https://brave.com/search/api/) |
 
-Flow on **Edit** and **View**: tap mic (disabled copy: **Needs network + OpenRouter key**) → Android `SpeechRecognizer` one-shot → bottom sheet with an editable transcript → **Send** or **Retry**. There is no persistent chat panel.
+Flow on **Edit** and **View**: tap mic (always clickable; muted without network + key, toast **Needs network + OpenRouter key**) → Android `SpeechRecognizer` one-shot → bottom sheet with an editable transcript → **Send** or **Retry**. There is no persistent chat panel.
 
 After Send: Jev chooses patch vs rewrite, then the chat model may call `get_diagram`, `set_diagram`, and `web_lookup`. MermaidPocket parses with the bundled mermaid.js renderer before apply. Valid source is applied (on the Edit undo stack). Invalid source toasts **Diagram was invalid. Last good version kept.**
 
@@ -162,7 +162,7 @@ No emulator in this environment. On a phone:
 3. Files: thumbnail after View, long-press bulk delete, swipe one row, share icon.
 4. Overflow: one **Save** and one **Share**. Each opens PNG, SVG, JPEG, and `.mmd`. PNG/JPEG show the width slider and a size estimate. Save of PNG, JPEG, and SVG opens the system picker. Share opens the Android share sheet. Copy all and Copy image still copy without that dialog.
 5. Save a `.mmd`, uninstall `com.jcompute.mermaidpocket`, reinstall it, choose `Documents/MermaidPocket` again, and confirm the file is listed.
-6. Without a key: Edit and View still show a disabled mic (`Needs network + OpenRouter key`). Settings → AI stores a key; with network, Send a transcript of a layout tweak and confirm the diagram updates. Send junk Mermaid via a forced invalid path (see `docs/ai.md`) and confirm last-good is kept.
+6. Without a key: Edit and View still show a clickable muted mic (tap toasts `Needs network + OpenRouter key`). Settings → Voice & AI stores a key; with network, Send a transcript of a layout tweak and confirm the diagram updates. Send junk Mermaid via a forced invalid path (see `docs/ai.md`) and confirm last-good is kept.
 
 ## License notes
 

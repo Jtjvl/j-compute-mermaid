@@ -13,7 +13,7 @@ Architecture B: a thin on-device agent. The core editor stays offline. Network i
 ## Happy path (device)
 
 1. Open a diagram (or paste one) so Edit/View have source.
-2. Confirm you have network. The mic stays **visible** when offline or when the OpenRouter key is empty; it is **disabled** with content description `Needs network + OpenRouter key`.
+2. Confirm you have network. The mic stays **visible and clickable** when offline or when the OpenRouter key is empty (muted icon; tap toasts `Needs network + OpenRouter key`).
 3. Grant microphone when asked (Android `SpeechRecognizer` only; whisper.cpp is not bundled).
 4. Tap mic on **Edit** or **View**. Speak something like “make the boxes blue” or “draw a sequence diagram of login”.
 5. Edit the transcript in the bottom sheet. **Retry** restarts the mic. **Send** runs the agent. There is no chat panel.

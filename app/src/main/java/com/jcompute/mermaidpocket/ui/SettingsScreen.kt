@@ -36,10 +36,6 @@ import androidx.compose.ui.unit.dp
 import com.jcompute.mermaidpocket.ai.AiConfig
 import com.jcompute.mermaidpocket.ai.AiDefaults
 
-/**
- * Settings chrome. Muses may later tweak copy/placement.
- * TODO(Muses): lock section labels and field order if needed.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -98,9 +94,9 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("AI", style = MaterialTheme.typography.titleMedium)
+            Text("Voice & AI", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Optional. Editing stays on-device. Keys are stored in EncryptedSharedPreferences (Android Keystore), never in plaintext prefs. Network is used only when you send a voice request.",
+                text = "Optional. Editing stays on-device. Keys stay in the Keystore. Network is used only when you Send a voice edit.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -108,7 +104,7 @@ fun SettingsScreen(
                 value = openRouter,
                 onValueChange = { openRouter = it },
                 label = "OpenRouter API key",
-                supporting = "Required for voice → diagram. Create a key at openrouter.ai",
+                supporting = "Required for voice edits. Create a key at openrouter.ai",
             )
             OutlinedTextField(
                 value = chatModel,
@@ -124,9 +120,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Classifier model") },
                 supportingText = {
-                    Text(
-                        "Jev on OpenRouter Decisions API. Default ${AiDefaults.CLASSIFIER_MODEL}. Alias ${AiDefaults.CLASSIFIER_MODEL_ALIAS} tracks latest.",
-                    )
+                    Text("Jev classifier on OpenRouter. Default ${AiDefaults.CLASSIFIER_MODEL}.")
                 },
                 singleLine = true,
             )
@@ -134,11 +128,11 @@ fun SettingsScreen(
                 value = brave,
                 onValueChange = { brave = it },
                 label = "Brave Search API key",
-                supporting = "Optional. web_lookup uses Brave Search JSON (X-Subscription-Token). Skip for layout-only edits. Get a key at api-dashboard.search.brave.com",
+                supporting = "Optional. Lets the model look things up. Get a key at api-dashboard.search.brave.com",
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Speech uses Android SpeechRecognizer (free, no extra account). Microphone permission is requested when you tap the mic.",
+                text = "Speech uses on-device recognition (no extra account). Microphone permission is asked when you tap the mic.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

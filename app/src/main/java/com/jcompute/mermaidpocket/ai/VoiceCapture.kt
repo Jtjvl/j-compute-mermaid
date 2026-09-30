@@ -112,7 +112,7 @@ class VoiceCapture(
             return when (error) {
                 SpeechRecognizer.ERROR_AUDIO -> "Microphone error."
                 SpeechRecognizer.ERROR_CLIENT -> "Speech recognition stopped."
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required."
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission needed for voice edit"
                 SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                     "Needs network + OpenRouter key"
                 SpeechRecognizer.ERROR_NO_MATCH -> "Could not hear that. Try again."

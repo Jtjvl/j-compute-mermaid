@@ -84,6 +84,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -160,7 +161,7 @@ fun MermaidAppRoot(
     val recordAudio = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) startVoiceCapture() else viewModel.notify("Microphone permission is required.")
+        if (granted) startVoiceCapture() else viewModel.notify("Microphone permission needed for voice edit")
     }
 
     fun onMic() {
@@ -587,11 +588,12 @@ private fun DocumentTopBar(
             IconButton(onClick = onPaste) {
                 Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste")
             }
-            IconButton(
-                onClick = onMic,
-                enabled = state.aiEnabled,
-            ) {
-                Icon(Icons.Outlined.Mic, contentDescription = state.voiceControlDescription)
+            IconButton(onClick = onMic) {
+                Icon(
+                    Icons.Outlined.Mic,
+                    contentDescription = state.voiceControlDescription,
+                    modifier = Modifier.alpha(if (state.aiEnabled) 1f else 0.45f),
+                )
             }
             if (editing) {
                 IconButton(onClick = onCopyAll) {

@@ -22,10 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/**
- * One-shot voice review. No persistent chat panel.
- * TODO(Muses): copy and sheet height if chrome is locked later.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceTranscriptSheet(
@@ -48,12 +44,12 @@ fun VoiceTranscriptSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
         ) {
-            Text("Voice to diagram", style = MaterialTheme.typography.titleMedium)
+            Text("Voice edit", style = MaterialTheme.typography.titleMedium)
             Text(
                 text = when {
                     sending -> "Updating diagram…"
                     listening -> "Listening…"
-                    else -> "Edit the transcript, then Send. Retry starts the mic again."
+                    else -> "Edit if needed, then Send. Retry listens again."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

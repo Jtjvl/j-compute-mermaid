@@ -187,16 +187,68 @@ class DiagramAgentTest {
 
 class VoiceChromeTest {
     @Test
-    fun editAndViewKeepAVisibleMic() {
+    fun editAndViewKeepAClickableMic() {
         val screen = source("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorScreen.kt")
         val bar = screen.substringAfter("private fun DocumentTopBar").substringBefore("internal fun PocketOverflowMenu")
         assertTrue(bar.contains("Icons.Outlined.Mic"))
-        assertTrue(bar.contains("enabled = state.aiEnabled"))
+        assertTrue(bar.contains("onClick = onMic"))
+        assertFalse(bar.contains("enabled = state.aiEnabled"))
+        assertTrue(bar.contains("0.45f"))
         assertTrue(bar.contains("state.voiceControlDescription"))
+        val micClick = screen.substringAfter("fun onMic()").substringBefore("val openDocument")
+        assertTrue(micClick.contains("notify(state.voiceControlDescription)"))
+        assertTrue(screen.contains("Microphone permission needed for voice edit"))
         assertTrue(screen.contains("VoiceTranscriptSheet"))
         assertTrue(screen.contains("SettingsScreen"))
         val overflow = screen.substringAfter("fun PocketOverflowMenu").substringBefore("private fun DocumentBottomBar")
         assertTrue(overflow.contains("Text(\"Settings\")"))
+        val fab = screen.substringAfter("floatingActionButton = {").substringBefore("snackbarHost")
+        assertFalse(fab.contains("Icons.Outlined.Mic"))
+    }
+
+    @Test
+    fun settingsAndSheetCopyAreLocked() {
+        val settings = source("app/src/main/java/com/jcompute/mermaidpocket/ui/SettingsScreen.kt")
+        assertFalse(settings.contains("TODO(Muses)"))
+        assertTrue(settings.contains("\"Settings\""))
+        assertTrue(settings.contains("\"Save\""))
+        assertTrue(settings.contains("\"Voice & AI\""))
+        assertTrue(settings.contains("Optional. Editing stays on-device. Keys stay in the Keystore. Network is used only when you Send a voice edit."))
+        assertTrue(settings.contains("Required for voice edits. Create a key at openrouter.ai"))
+        assertTrue(settings.contains("OpenRouter model id. Default \${AiDefaults.CHAT_MODEL}"))
+        assertTrue(settings.contains("Jev classifier on OpenRouter. Default \${AiDefaults.CLASSIFIER_MODEL}."))
+        assertFalse(settings.contains("Decisions API"))
+        assertFalse(settings.contains("CLASSIFIER_MODEL_ALIAS"))
+        assertTrue(settings.contains("Optional. Lets the model look things up. Get a key at api-dashboard.search.brave.com"))
+        assertTrue(settings.contains("Speech uses on-device recognition (no extra account). Microphone permission is asked when you tap the mic."))
+        assertTrue(settings.contains("\"Hide key\""))
+        assertTrue(settings.contains("\"Show key\""))
+
+        val sheet = source("app/src/main/java/com/jcompute/mermaidpocket/ui/VoiceTranscriptSheet.kt")
+        assertFalse(sheet.contains("TODO(Muses)"))
+        assertTrue(sheet.contains("\"Voice edit\""))
+        assertTrue(sheet.contains("Listening…"))
+        assertTrue(sheet.contains("Updating diagram…"))
+        assertTrue(sheet.contains("Edit if needed, then Send. Retry listens again."))
+        assertTrue(sheet.contains("\"Transcript\""))
+        assertTrue(sheet.contains("height(140.dp)"))
+        assertTrue(sheet.contains("skipPartiallyExpanded = true"))
+        assertTrue(sheet.contains("Text(\"Retry\")"))
+        assertTrue(sheet.contains("Text(\"Send\")"))
+        assertTrue(sheet.contains("if (!sending) onDismiss()"))
+    }
+
+    @Test
+    fun successApplyIsSilentAndInvalidKeepsLastGood() {
+        val model = source("app/src/main/java/com/jcompute/mermaidpocket/ui/EditorViewModel.kt")
+        assertFalse(model.contains("Diagram updated"))
+        assertTrue(model.contains("Diagram was invalid. Last good version kept."))
+        val availability = source("app/src/main/java/com/jcompute/mermaidpocket/ai/AiAvailability.kt")
+        assertTrue(availability.contains("Needs network + OpenRouter key"))
+        assertTrue(availability.contains("Add an OpenRouter key in Settings"))
+        val capture = source("app/src/main/java/com/jcompute/mermaidpocket/ai/VoiceCapture.kt")
+        assertTrue(capture.contains("Microphone permission needed for voice edit"))
+        assertFalse(capture.contains("is required."))
     }
 
     @Test

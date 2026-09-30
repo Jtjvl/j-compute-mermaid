@@ -818,7 +818,6 @@ class EditorViewModel(
             when (outcome) {
                 is AgentOutcome.Applied -> {
                     applyAiSource(outcome.source)
-                    notify("Diagram updated")
                 }
                 is AgentOutcome.Invalid -> {
                     _state.update { it.copy(voice = it.voice.copy(sending = false)) }
